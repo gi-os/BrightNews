@@ -31,7 +31,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "light-sdk"
+rootProject.name = "light-rss"
 
 includeBuild("plugin")
 include(":lint-rules")

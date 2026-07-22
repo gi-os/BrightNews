@@ -6,6 +6,26 @@ build/
 local.properties
 local/
 
+### Local credentials and signing material ###
+.env
+.env.*
+!.env.example
+secrets.properties
+secrets*.properties
+keystore.properties
+credentials*.json
+*.jks
+!sdk/keys/lightsdk-dev.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.pk8
+*.key
+*.apk
+*.aab
+*.log
+
 ### IntelliJ IDEA ###
 .idea/
 *.iws

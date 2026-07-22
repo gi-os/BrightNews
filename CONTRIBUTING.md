@@ -1,35 +1,40 @@
-# Contributing
+# Contributing to Light RSS
 
-**The [code of conduct](CODE_OF_CONDUCT.md) applies to all contributions, please go check that out first.**
+Thanks for helping make Light RSS better. This repository is an unofficial community project built on the Light SDK.
 
-### Limitations
-While the software in this library is fully open source, it is depended upon by the Light Phone's existing products. Above all else, we need to maintain compatibility with those products so we can continue to deliver safe, timely, and functional updates to our customers. We are excited to pull more closed code from those products into our open repositories, but it will take time. Ultimately, this means we are currently not interested in certain types of contributions from the community:
-* Public API changes
-* Additional/updated third-party dependencies (we'll do our best to stay up-to-date)
-* Meaningful architectural changes
+## Before you start
 
-### Welcome Contributions
+- Search the repository's existing issues before opening a duplicate.
+- Keep changes focused on the RSS reader. SDK framework changes usually belong in the upstream [Light SDK](https://github.com/lightphone/light-sdk).
+- For a larger feature or architecture change, open an issue first so the behavior and LightOS fit can be discussed.
+- Never put tokens, local property files, signing keys, databases, logs, or personal feed exports in an issue or pull request.
+- Follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities through [SECURITY.md](SECURITY.md).
 
-We expect contributions to come in the form of GitHub [issues](https://github.com/lightphone/light-sdk/issues) and [pull requests](https://github.com/lightphone/light-sdk/pulls). Not every issue requires a pull request, but we will close any pull requests that are not associated with an existing issue. If you are interested in submitting code changes for your issue, please state that clearly. Someone from the Light team will explicitly indicate on an issue that we would welcome a relevant PR. **We reserve the right to politely refuse any proposed work. If having your work merged is important to you, please wait until we give a green light on your issue!**
+## Local setup
 
-We expect _all_ modules in this repository to compile, and _all_ tests to pass for each PR. We will have an automated check that runs on GitHub, but to save time/resources, **please** check that this is true before opening your PR. For this repo, you can run `./gradlew check` in the root directory.
+Use JDK 17 and Android SDK Platform 36. The Light Keyboard package also requires GitHub package-read credentials through `GH_PACKAGES_USER` and `GH_PACKAGES_TOKEN`, or the ignored `local.properties` keys documented in the [README](README.md#build).
 
-Types of issues we are excited to receive:
-* **Bug Reports** (something does not work as it is intended to)
-  * Please include the commit on which you are experiencing the issue, a description, and detailed reproduction steps.
-* **Feature Requests** ("it would be helpful if this software could also do `X`")
-  * This includes requests to add open source third-party libraries or Android APIs to the build [plugin's](plugin) allow-list!
-  * New features should be relevant to a meaningful percentage of Light Phone users / consumers of this software. We reserve the right to make the final call on whether or not this is true for your issue.
-* **Security Issues** (something in this software might allow a bad actor to degrade a Light Phone user's experience or violate their privacy)
-* **_Material_ Performance Improvements** (something in this software is actively degrading a Light Phone user's experience, or is egregiously consuming resources)
+Run the app checks before submitting a change:
 
-### AI/LLM Policy
-(Adapted from [Astral's](https://github.com/astral-sh/.github/blob/main/AI_POLICY.md))
+```bash
+./gradlew :tool:testDebugUnitTest :tool:lintDebug :tool:assembleDebug
+```
 
-We like talking to _people_!
+If you changed navigation, layout, input, theming, or list behavior, also run the app in the 1080 × 1240 LightOS emulator and exercise both the visible back button and the system back action.
 
-- We expect all communication in this repository to come from a human. That includes issue/PR descriptions, comments, and replies. If you are a non-native English speaker using an LLM to translate for you, we would be grateful if you included your original content alongside the translation.
-- We expect you to be able to explain any proposed code changes in your own words. 
-- We find that code comments produced by LLMs tend to be overly verbose and/or specific to your dev session. Please delete them, or if you think they're genuinely useful, make sure they are brief and in your voice.
-- **You are responsible for any code or other communication that comes from your account**.
-- **We (the humans on the Light dev team) are responsible for any code that gets merged.**
+## Pull requests
+
+Keep pull requests small enough to review. Include:
+
+- what changed and why;
+- how it was tested;
+- screenshots for visible UI changes;
+- any privacy, permission, network, storage, or migration impact.
+
+Do not commit generated APKs or build output. Do not modify `AndroidManifest.xml`; the Light SDK generates it from `tool/lighttool.toml`.
+
+The repository's trusted build workflow runs only after code lands on `main` because Gradle needs a package-registry credential. Pull requests from forks must be tested locally and are never executed through a privileged pull-request trigger with maintainer secrets.
+
+## Design expectations
+
+Light RSS should remain quiet, compact, text-first, and usable without a touchscreen-first Android visual language. Prefer SDK primitives and tokens, keep primary actions in LightOS bars, avoid unnecessary animation, and preserve one-screen-at-a-time back navigation.
