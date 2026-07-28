@@ -8,6 +8,24 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.4.0 - 2026-07-27
+
+### Changed
+
+- Scanning no longer goes through the SDK scanner composable. `RssScanner.kt` owns the CameraX
+  `LifecycleCameraController`, binds it to the lifecycle, and renders it in a `PreviewView` — the
+  same way the LightPass camera screens do — with an ML Kit analyzer restricted to QR codes.
+- The permission gate reads Android directly through `Context.checkSelfPermission` instead of
+  asking LightOS whether the camera is granted. LightOS is still asked to show its permission
+  dialog, but its answer is no longer what decides whether the camera starts, so a server that
+  will not reply cannot block the preview.
+- The state is re-read on every `RESUMED`, so accepting the permission dialog brings the preview
+  up without leaving the screen.
+- Whatever went wrong is printed at the bottom of the scan screen: the LightOS reply, or the
+  CameraX bind failure, plus the adb command to grant the permission by hand.
+- The vendored light-sdk plugin allows `LocalContext` and `LocalLifecycleOwner`, which a tool
+  needs to bind CameraX itself. LightPass uses both.
+
 ## 1.3.0 - 2026-07-27
 
 ### Changed

@@ -79,10 +79,7 @@ class LightSdkPlugin : Plugin<Project> {
             "android.content.BroadcastReceiver",
             "android.content.ContentProvider",
             "android.content.ServiceConnection",
-            "androidx.compose.ui.platform.LocalContext",
             "androidx.compose.ui.platform.LocalView",
-            "androidx.compose.ui.platform.LocalLifecycleOwner",
-            "androidx.lifecycle.compose.LocalLifecycleOwner",
             "androidx.activity.",
             "androidx.appcompat.",
             "java.lang.reflect.",
@@ -91,10 +88,10 @@ class LightSdkPlugin : Plugin<Project> {
         )
 
         val BLOCKED_CODE_PATTERNS = listOf(
-            Regex("""\bLocalContext\b""") to "LocalContext is not allowed — use LightScreen APIs instead",
+            // LocalContext and LocalLifecycleOwner are permitted: a tool that runs CameraX
+            // itself, as LightPass does, cannot bind a controller without them.
             Regex("""\bLocalView\b""") to "LocalView is not allowed — use LightScreen APIs instead",
             Regex("""\bLocalActivity\b""") to "LocalActivity is not allowed — use LightScreen APIs instead",
-            Regex("""\bLocalLifecycleOwner\b""") to "LocalLifecycleOwner is not allowed — use LightScreen APIs instead",
             Regex("""\bas\??\s+(?:\w+\.)*\w*Activity\b""") to "Casting to Activity is not allowed",
             Regex("""\bas\??\s+(?:\w+\.)*(?:Context|ContextWrapper|ContextThemeWrapper|Application|Service|ContentProvider|BroadcastReceiver)\b""") to "Casting to Android framework type is not allowed",
             Regex("""\bstartActivity\s*\(""") to "startActivity() is not allowed — use LightScreen.navigateTo() instead",

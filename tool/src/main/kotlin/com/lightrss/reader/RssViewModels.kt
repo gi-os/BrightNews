@@ -1,16 +1,10 @@
 package com.lightrss.reader
 
-import android.Manifest
 import androidx.lifecycle.viewModelScope
 import com.thelightphone.sdk.LightViewModel
-import com.thelightphone.sdk.checkPermission
-import com.thelightphone.sdk.shared.LightServiceMethod
-import com.thelightphone.sdk.shared.asKotlinResult
 import com.thelightphone.sdk.SimpleLightScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -78,85 +72,12 @@ data class AddFeedUiState(
     val error: String? = null,
 )
 
-/**
- * What we know about camera access for the scan screen.
- *
- * [Unavailable] is not the same as [Denied]: it means LightOS never answered the permission
- * check, which tells us nothing about the actual grant state, so the camera is worth trying.
- */
-enum class CameraAccess { Checking, Granted, Denied, Unavailable }
-
 /** No-state viewmodel for screens that only route, such as the add-feed chooser. */
 class ChooserViewModel : LightViewModel<Long>()
 
 class AddFeedViewModel(private val repository: RssRepository) : LightViewModel<Long>() {
     private val _state = MutableStateFlow(AddFeedUiState())
     val state = _state.asStateFlow()
-
-    private val _camera = MutableStateFlow(CameraAccess.Checking)
-
-    /** Camera state for the scan screen. Stays [CameraAccess.Checking] until asked to look. */
-    val camera: StateFlow<CameraAccess> = _camera.asStateFlow()
-
-    private var cameraNeeded = false
-    private var permissionRequested = false
-    private var cameraCheckJob: Job? = null
-
-    /**
-     * Re-checks the camera whenever the screen comes back to the front, which includes returning
-     * from the LightOS permission dialog. This is the LightScreen equivalent of watching the
-     * RESUMED lifecycle state.
-     */
-    override fun onScreenShow(screen: SimpleLightScreen<Long>) {
-        super.onScreenShow(screen)
-        if (cameraNeeded) refreshCameraAccess()
-    }
-
-    /** Called by the scan screen when it opens. */
-    fun startCameraChecks() {
-        cameraNeeded = true
-        refreshCameraAccess()
-    }
-
-    /** Lets the user retry after declining, without leaving the screen. */
-    fun retryCameraPermission() {
-        permissionRequested = false
-        refreshCameraAccess()
-    }
-
-    fun markPermissionRequested() {
-        permissionRequested = true
-    }
-
-    fun shouldRequestPermission(): Boolean =
-        !permissionRequested && _camera.value == CameraAccess.Denied
-
-    private fun refreshCameraAccess() {
-        if (_camera.value == CameraAccess.Granted) return
-        cameraCheckJob?.cancel()
-        cameraCheckJob = viewModelScope.launch {
-            repeat(CAMERA_CHECK_ATTEMPTS) { attempt ->
-                val response = checkPermission(Manifest.permission.CAMERA).asKotlinResult.getOrNull()
-                when {
-                    response?.permissionResult ==
-                        LightServiceMethod.GetPermission.Result.Granted -> {
-                        _camera.value = CameraAccess.Granted
-                        return@launch
-                    }
-                    // The server answered, so its answer is worth believing.
-                    response != null -> {
-                        _camera.value = CameraAccess.Denied
-                        return@launch
-                    }
-                    // No answer yet. The service binding can lose a race with the first frame,
-                    // so give it a few tries before deciding LightOS will not reply at all.
-                    attempt < CAMERA_CHECK_ATTEMPTS - 1 -> delay(CAMERA_CHECK_DELAY_MS)
-                    else -> _camera.value = CameraAccess.Unavailable
-                }
-            }
-        }
-    }
-
 
     /**
      * Adds the feed encoded in a scanned QR code. Called from the camera analyzer, so it never
@@ -368,7 +289,3 @@ class SettingsViewModel(private val repository: RssRepository) : LightViewModel<
         }
     }
 }
-
-/** How many times to ask LightOS about the camera before giving up on a reply. */
-private const val CAMERA_CHECK_ATTEMPTS = 4
-private const val CAMERA_CHECK_DELAY_MS = 600L
