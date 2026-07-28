@@ -97,7 +97,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                 ArticleList(
                     articles = articles,
                     emptyMessage = if (unreadOnly) {
-                        "You’re all caught up.\n\nSwitch to ALL to revisit the archive."
+                        "You’re all caught up.\n\nSwitch the filter to revisit the archive."
                     } else {
                         "No articles yet.\n\nRefresh or add a subscription."
                     },
@@ -113,7 +113,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                             contentDescription = "Saved articles",
                         ),
                         LightBarButton.Text(
-                            text = if (unreadOnly) "ALL" else "UNREAD",
+                            text = if (unreadOnly) "UNREAD" else "ALL",
                             onClick = viewModel::toggleFilter,
                         ),
                         LightBarButton.LightIcon(
@@ -208,6 +208,25 @@ class AddFeedChooserScreen(
                 }
                 SettingsRow("TYPE ADDRESS", "Enter a website or feed URL") {
                     navigateTo({ AddFeedScreen(it, repository) }) { feedId -> goBack(feedId) }
+                }
+                Column(
+                    modifier = Modifier.padding(
+                        start = 1f.gridUnitsAsDp(),
+                        end = 1f.gridUnitsAsDp(),
+                        top = 1f.gridUnitsAsDp(),
+                    ),
+                ) {
+                    LightText("MAKE A CODE", LightTextVariant.Superfine, lighten = true)
+                    LightText(
+                        text = "Turn any feed address into a QR code on another device at",
+                        variant = LightTextVariant.Detail,
+                        modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+                    )
+                    LightText(
+                        text = QR_GENERATOR_URL,
+                        variant = LightTextVariant.Detail,
+                        modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
+                    )
                 }
             }
         }
@@ -683,7 +702,18 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.1.0",
+                            text = "QR CODE GENERATOR",
+                            variant = LightTextVariant.Superfine,
+                            lighten = true,
+                            modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
+                        )
+                        LightText(
+                            text = QR_GENERATOR_URL,
+                            variant = LightTextVariant.Detail,
+                            modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
+                        )
+                        LightText(
+                            text = "VERSION 1.2.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
@@ -756,3 +786,6 @@ private fun LoadingScreen(message: String, modifier: Modifier = Modifier) {
         LightText(message, LightTextVariant.Paragraph, lighten = true)
     }
 }
+
+/** Where to generate a scannable feed code. Shown as text: the reader never opens a browser. */
+private const val QR_GENERATOR_URL = "gi-os.github.io/LightRSS"

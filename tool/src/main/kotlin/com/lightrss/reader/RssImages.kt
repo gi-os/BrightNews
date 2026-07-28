@@ -148,8 +148,8 @@ class ArticleImageStore(
     }
 
     companion object {
-        /** Width used for list thumbnails, in pixels. */
-        const val THUMBNAIL_WIDTH_PX = 220
+        /** Width used for list thumbnails, in pixels. Sized for a 6.8 grid-unit wide slot. */
+        const val THUMBNAIL_WIDTH_PX = 360
 
         /** Width used for images inside the reader, matching the Light Phone III panel. */
         const val READER_WIDTH_PX = 1080

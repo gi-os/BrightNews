@@ -8,6 +8,31 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.2.0 - 2026-07-27
+
+### Added
+
+- A QR code generator at [gi-os.github.io/LightRSS](https://gi-os.github.io/LightRSS), so a feed
+  address can be turned into a scannable code on a laptop instead of typed on the phone. It runs
+  entirely in the browser and loads nothing from a third party.
+- The generator address is shown on the add-feed chooser and in Settings.
+
+### Fixed
+
+- The QR scanner failed in release builds: R8 stripped the ML Kit component registrars that
+  `BarcodeScanning.getClient()` looks up reflectively. The camera and barcode stack is now declared
+  directly by the tool and kept by `tool/proguard-rules.pro`.
+- List thumbnails were too small to read. Article rows and thumbnails are larger, thumbnails decode
+  at 360 px instead of 220 px, and titles get a third line.
+
+### Changed
+
+- The inbox filter button now names the view you are in — `UNREAD` while showing unread, `ALL`
+  while showing everything — instead of the view it would switch to.
+- The vendored light-sdk plugin allows `androidx.camera` and `com.google.mlkit` as tool
+  dependencies. Official Light distribution may not; the scanner still works without them
+  declared, but release builds need the keep rules either way.
+
 ## 1.1.0 - 2026-07-27
 
 ### Added

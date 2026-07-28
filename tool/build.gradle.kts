@@ -55,7 +55,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName(if (hasSideloadKey) "sideload" else "lightsdkDev")
         }
     }
@@ -79,6 +79,14 @@ kotlin {
 
 dependencies {
     implementation(project(":sdk:client"))
+    // QR scanning. The SDK composable does the work, but declaring the stack here keeps the
+    // classes on the tool's compile and runtime classpath and out of R8's reach.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.camera.mlkit.vision)
+    implementation(libs.mlkit.barcode.scanning)
     testImplementation(libs.kotlin.test)
     ksp(libs.androidx.room.compiler)
 }

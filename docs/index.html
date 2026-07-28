@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Light RSS — feed QR codes</title>
+<meta name="description" content="Turn any RSS or Atom feed address into a QR code you can scan with Light RSS on the Light Phone III.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23000'/><rect x='3' y='3' width='4' height='4' fill='%23fff'/><rect x='9' y='3' width='4' height='4' fill='%23fff'/><rect x='3' y='9' width='4' height='4' fill='%23fff'/></svg>">
+<style>
+  :root {
+    --ink: #f2f2f2;
+    --paper: #000;
+    --dim: #8a8a8a;
+    --line: #2a2a2a;
+    --mono: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --ink: #101010; --paper: #fff; --dim: #6b6b6b; --line: #ddd; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+  h1 { font-size: 1.35rem; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 .4rem; }
+  h2 { font-size: .78rem; letter-spacing: .22em; text-transform: uppercase; color: var(--dim);
+       margin: 3rem 0 .9rem; font-weight: 400; }
+  p { margin: 0 0 1rem; }
+  a { color: inherit; text-underline-offset: 3px; }
+  .lede { color: var(--dim); margin-bottom: 2.5rem; }
+  label { display: block; font-size: .72rem; letter-spacing: .2em; text-transform: uppercase;
+          color: var(--dim); margin-bottom: .5rem; }
+  input {
+    width: 100%; padding: .85rem 1rem; font: inherit; color: var(--ink);
+    background: transparent; border: 1px solid var(--line); border-radius: 0;
+  }
+  input:focus { outline: none; border-color: var(--ink); }
+  .row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .85rem; }
+  button {
+    font: inherit; font-size: .74rem; letter-spacing: .18em; text-transform: uppercase;
+    padding: .6rem 1rem; color: var(--ink); background: transparent;
+    border: 1px solid var(--line); cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--ink); }
+  button:disabled { opacity: .35; cursor: default; }
+  .stage {
+    margin-top: 2rem; padding: 1.75rem; border: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center; gap: 1rem;
+    min-height: 20rem; justify-content: center;
+  }
+  .stage img { width: min(19rem, 78vw); height: auto; image-rendering: pixelated;
+               background: #fff; padding: 1rem; }
+  .caption { font-size: .78rem; color: var(--dim); word-break: break-all; text-align: center; }
+  .status { font-size: .78rem; color: var(--dim); text-align: center; }
+  .status[data-error="true"] { color: var(--ink); }
+  .presets { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+  .presets button { font-size: .68rem; letter-spacing: .1em; text-transform: none; }
+  ol { padding-left: 1.2rem; }
+  li { margin-bottom: .5rem; }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--line);
+           font-size: .74rem; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Light RSS</h1>
+  <p class="lede">
+    Paste a feed address, point the phone at the code, done. No typing a URL on a
+    Light Phone keyboard.
+  </p>
+
+  <label for="url">Feed or website address</label>
+  <input id="url" type="url" inputmode="url" spellcheck="false" autocomplete="off"
+         placeholder="https://example.com/feed.xml" value="https://www.nasa.gov/feed/">
+  <div class="presets" id="presets"></div>
+  <div class="row">
+    <button id="download" disabled>Download PNG</button>
+    <button id="copy" disabled>Copy address</button>
+  </div>
+
+  <div class="stage">
+    <img id="qr" alt="" hidden>
+    <p class="caption" id="caption"></p>
+    <p class="status" id="status">Enter an address to generate a code.</p>
+  </div>
+
+  <h2>Scanning it</h2>
+  <ol>
+    <li>Open <strong>Light RSS</strong> on the phone.</li>
+    <li>Tap the list icon for <strong>Subscriptions</strong>, then <strong>+</strong>.</li>
+    <li>Choose <strong>Scan QR code</strong> and allow the camera the first time.</li>
+    <li>Frame this code. The feed is fetched and added on the spot.</li>
+  </ol>
+  <p>
+    A website address works too — the app looks for the RSS or Atom link on the page and
+    subscribes to whatever it finds.
+  </p>
+
+  <h2>Getting the app</h2>
+  <p>
+    Signed APKs are on the
+    <a href="https://github.com/gi-os/LightRSS/releases">releases page</a>. Install once with
+    <code>adb install -r</code>, or add <code>https://github.com/gi-os/LightRSS</code> to
+    <a href="https://github.com/ImranR98/Obtainium">Obtainium</a> for automatic updates.
+    See <a href="https://github.com/gi-os/LightRSS/blob/main/INSTALL.md">INSTALL.md</a>.
+  </p>
+
+  <footer>
+    Everything here runs in your browser. The address you paste is never sent anywhere, and this
+    page loads nothing from a third party. QR encoding by
+    <a href="https://github.com/kazuhikoarase/qrcode-generator">qrcode-generator</a> (MIT).
+    <br>
+    <a href="https://github.com/gi-os/LightRSS">gi-os/LightRSS</a> — a fork of
+    <a href="https://github.com/zachattack323/LightRSS">zachattack323/LightRSS</a>.
+  </footer>
+</main>
+
+<script src="vendor/qrcode.js"></script>
+<script>
+(function () {
+  var input = document.getElementById('url');
+  var image = document.getElementById('qr');
+  var caption = document.getElementById('caption');
+  var status = document.getElementById('status');
+  var downloadButton = document.getElementById('download');
+  var copyButton = document.getElementById('copy');
+  var presets = document.getElementById('presets');
+  var current = '';
+  var currentCode = null;
+
+  var PRESETS = [
+    ['NASA', 'https://www.nasa.gov/feed/'],
+    ['BBC World', 'https://feeds.bbci.co.uk/news/world/rss.xml'],
+    ['Hacker News', 'https://hnrss.org/frontpage'],
+    ['NPR', 'https://feeds.npr.org/1001/rss.xml'],
+    ['The Verge', 'https://www.theverge.com/rss/index.xml']
+  ];
+
+  PRESETS.forEach(function (preset) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = preset[0];
+    button.addEventListener('click', function () {
+      input.value = preset[1];
+      render();
+    });
+    presets.appendChild(button);
+  });
+
+  // Mirrors RssApi.normalizeUrl in the app: assume https, require a real host.
+  function normalize(raw) {
+    var value = raw.trim();
+    if (!value) return null;
+    if (value.indexOf('://') === -1) value = 'https://' + value;
+    var parsed;
+    try { parsed = new URL(value); } catch (error) { return null; }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    if (parsed.hostname.indexOf('.') === -1 && parsed.hostname !== 'localhost') return null;
+    return parsed.toString();
+  }
+
+  // Smallest version that fits, with the highest error correction that still fits it.
+  function encode(text) {
+    var levels = ['H', 'Q', 'M', 'L'];
+    for (var i = 0; i < levels.length; i++) {
+      for (var version = 2; version <= 40; version++) {
+        try {
+          var code = qrcode(version, levels[i]);
+          code.addData(text);
+          code.make();
+          return code;
+        } catch (error) { /* too small for this version, keep going */ }
+      }
+    }
+    return null;
+  }
+
+  function render() {
+    var url = normalize(input.value);
+    if (!url) {
+      current = '';
+      currentCode = null;
+      image.hidden = true;
+      caption.textContent = '';
+      downloadButton.disabled = true;
+      copyButton.disabled = true;
+      status.dataset.error = input.value.trim() ? 'true' : 'false';
+      status.textContent = input.value.trim()
+        ? 'That does not look like a web address.'
+        : 'Enter an address to generate a code.';
+      return;
+    }
+
+    var code = encode(url);
+    if (!code) {
+      status.dataset.error = 'true';
+      status.textContent = 'That address is too long to encode.';
+      return;
+    }
+
+    current = url;
+    currentCode = code;
+    image.src = code.createDataURL(10, 4);
+    image.alt = 'QR code for ' + url;
+    image.hidden = false;
+    caption.textContent = url;
+    status.dataset.error = 'false';
+    status.textContent = 'Scan with Light RSS → Subscriptions → + → Scan QR code';
+    downloadButton.disabled = false;
+    copyButton.disabled = false;
+  }
+
+  function filename(url) {
+    try {
+      return 'lightrss-' + new URL(url).hostname.replace(/^www\./, '').replace(/[^a-z0-9]+/gi, '-') + '.png';
+    } catch (error) {
+      return 'lightrss-feed.png';
+    }
+  }
+
+  // Redraw at print resolution rather than saving the small preview GIF.
+  function toPng(code, scale, quiet) {
+    var count = code.getModuleCount();
+    var size = (count + quiet * 2) * scale;
+    var canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    var context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, size, size);
+    context.fillStyle = '#000000';
+    for (var row = 0; row < count; row++) {
+      for (var col = 0; col < count; col++) {
+        if (code.isDark(row, col)) {
+          context.fillRect((col + quiet) * scale, (row + quiet) * scale, scale, scale);
+        }
+      }
+    }
+    return canvas.toDataURL('image/png');
+  }
+
+  downloadButton.addEventListener('click', function () {
+    if (!currentCode) return;
+    var link = document.createElement('a');
+    link.href = toPng(currentCode, 16, 4);
+    link.download = filename(current);
+    link.click();
+  });
+
+  copyButton.addEventListener('click', function () {
+    if (!current || !navigator.clipboard) return;
+    navigator.clipboard.writeText(current).then(function () {
+      var original = copyButton.textContent;
+      copyButton.textContent = 'Copied';
+      setTimeout(function () { copyButton.textContent = original; }, 1200);
+    });
+  });
+
+  input.addEventListener('input', render);
+  render();
+})();
+</script>
+</body>
+</html>

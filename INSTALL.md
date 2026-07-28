@@ -15,14 +15,14 @@ built by CI from a tagged commit and signed with a personal sideload key.
 
 ```bash
 adb devices                                # confirm the phone is listed
-adb install -r LightRSS-1.1.0.apk          # -r replaces an existing install
+adb install -r LightRSS-1.2.0.apk          # -r replaces an existing install
 ```
 
 Verify what you are installing first:
 
 ```bash
-sha256sum -c LightRSS-1.1.0.apk.sha256
-apksigner verify --print-certs LightRSS-1.1.0.apk
+sha256sum -c LightRSS-1.2.0.apk.sha256
+apksigner verify --print-certs LightRSS-1.2.0.apk
 ```
 
 The signing certificate should report this SHA-256 fingerprint on every release:
@@ -32,6 +32,12 @@ C6:90:2A:A1:87:0B:4F:FA:2F:D0:CD:62:76:43:DC:8D:DE:E7:CC:0F:DB:D1:75:2F:EB:B3:D9
 ```
 
 If that fingerprint ever changes, the APK was not built from this repository's key — do not install it.
+
+## Making a code to scan
+
+[gi-os.github.io/LightRSS](https://gi-os.github.io/LightRSS) turns a feed or website address into
+a QR code in the browser. Open it on a laptop, paste the address, and scan the screen with
+**Subscriptions → + → Scan QR code**.
 
 ## Option B — Obtainium, with automatic updates
 
@@ -63,8 +69,8 @@ CI builds on tags only. `versionCode` must increase every time or Android refuse
 3. Commit, then tag with the same version and push:
 
    ```bash
-   git tag v1.1.1
-   git push origin main v1.1.1
+   git tag v1.2.1
+   git push origin main v1.2.1
    ```
 
 The **Release APK** workflow runs tests and lint, refuses to continue if the tag and

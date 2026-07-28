@@ -46,6 +46,7 @@ Screenshots are from the 1080 × 1240 LightOS emulator and show public feed cont
 - Pulls images from `enclosure`, `media:content`, `media:thumbnail`, `itunes:image`, and inline `<img>` markup, dropping 1 × 1 beacons, `data:` URIs, and known tracking hosts.
 - Downloads images lazily, only for rows and articles on screen, into an 8 MB memory cache and a 24 MB disk cache.
 - Adds subscriptions by scanning a QR code with the SDK scanner, accepting bare URLs, `feed://` and `rss://` schemes, and codes that wrap an address in text.
+- Pairs with a browser-side [QR code generator](https://gi-os.github.io/LightRSS) for turning a feed address into a scannable code.
 - Keeps a Settings switch for images: turn them off for a text-only reader, or clear the cache and keep them on.
 
 Light RSS does not use a WebView or open article pages. It turns feed-provided HTML into a focused reading view of text and, when images are enabled, the pictures the publisher placed in the article. Scripts, advertisements, and tracking pixels are never loaded, and images can be switched off entirely in Settings.
@@ -68,6 +69,13 @@ The UI is deliberately compact and uses the SDK rather than imitating it:
 Light RSS does not add an account, advertising, its own analytics integration, or a Light RSS-operated server. The app contacts the feed or website addresses you subscribe to, so those hosts receive an ordinary HTTP request, your IP address, and the `LightRSS/1.1 (Light Phone III)` user agent. On first launch it adds and refreshes the three starter feeds listed above.
 
 With images enabled, the app also requests images from whichever host serves them, but only for articles that are on screen. All subscriptions, article text, and downloaded images are stored locally. Unfollowing a feed removes its local articles; Settings can remove read, unsaved articles; uninstalling the app removes its database. See [PRIVACY.md](PRIVACY.md) for the complete disclosure.
+
+## Feed QR codes
+
+[**gi-os.github.io/LightRSS**](https://gi-os.github.io/LightRSS) turns any feed or website address
+into a QR code. Scan it with **Subscriptions → + → Scan QR code** instead of typing a URL on the
+Light Phone keyboard. The page is static, runs its encoding in your browser, and loads nothing from
+a third party.
 
 ## Install
 

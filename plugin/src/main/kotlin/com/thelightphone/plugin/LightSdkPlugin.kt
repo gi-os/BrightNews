@@ -34,6 +34,11 @@ class LightSdkPlugin : Plugin<Project> {
             "androidx.work",
             "androidx.startup",
             "io.github.david-allison:anki-android-backend",
+            // Declared by Light RSS for the scan-to-subscribe screen. These already ship inside
+            // the APK as transitive dependencies of :sdk:ui; declaring them directly keeps R8
+            // from treating the camera and barcode stack as unreachable in release builds.
+            "androidx.camera",
+            "com.google.mlkit",
         )
 
         val ALLOWED_PLUGINS = setOf(

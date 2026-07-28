@@ -87,7 +87,7 @@ private fun ArticleListRow(
                     text = article.title,
                     variant = LightTextVariant.Paragraph,
                     lighten = article.isRead,
-                    maxLines = 2,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
@@ -368,8 +368,8 @@ fun sourceHost(url: String): String = runCatching {
     URI(url).host.orEmpty().removePrefix("www.").uppercase(Locale.US)
 }.getOrDefault("")
 
-private const val ARTICLE_ROW_HEIGHT = 4.75f
-private const val THUMBNAIL_WIDTH = 4.4f
-private const val THUMBNAIL_HEIGHT = 3.6f
-private const val READER_IMAGE_PLACEHOLDER = 6f
+private const val ARTICLE_ROW_HEIGHT = 6.1f
+private const val THUMBNAIL_WIDTH = 6.8f
+private const val THUMBNAIL_HEIGHT = 5.2f
+private const val READER_IMAGE_PLACEHOLDER = 8f
 private const val FEED_ROW_HEIGHT = 3.6f
