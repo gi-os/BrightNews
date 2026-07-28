@@ -15,14 +15,14 @@ built by CI from a tagged commit and signed with a personal sideload key.
 
 ```bash
 adb devices                                # confirm the phone is listed
-adb install -r LightRSS-1.2.0.apk          # -r replaces an existing install
+adb install -g -r LightRSS-1.2.1.apk       # -r replaces, -g grants the camera permission
 ```
 
 Verify what you are installing first:
 
 ```bash
-sha256sum -c LightRSS-1.2.0.apk.sha256
-apksigner verify --print-certs LightRSS-1.2.0.apk
+sha256sum -c LightRSS-1.2.1.apk.sha256
+apksigner verify --print-certs LightRSS-1.2.1.apk
 ```
 
 The signing certificate should report this SHA-256 fingerprint on every release:
@@ -32,6 +32,18 @@ C6:90:2A:A1:87:0B:4F:FA:2F:D0:CD:62:76:43:DC:8D:DE:E7:CC:0F:DB:D1:75:2F:EB:B3:D9
 ```
 
 If that fingerprint ever changes, the APK was not built from this repository's key — do not install it.
+
+## If the scanner cannot open the camera
+
+LightOS mediates runtime permissions for its tools and refuses that call for tools it did not
+install, so a sideloaded build may never get a camera prompt. Grant it directly instead:
+
+```bash
+adb shell pm grant com.lightrss.reader android.permission.CAMERA
+```
+
+Installing with `adb install -g -r LightRSS-<version>.apk` grants it up front. Every other screen
+works without the camera; only scan-to-subscribe needs it.
 
 ## Making a code to scan
 

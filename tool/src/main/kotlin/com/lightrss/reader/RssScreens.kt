@@ -1,5 +1,6 @@
 package com.lightrss.reader
 
+import android.Manifest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,21 +14,28 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import com.thelightphone.sdk.InitialScreen
-import com.thelightphone.sdk.LightQrCodeScanner
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
 import com.thelightphone.sdk.buildDatabase
+import com.thelightphone.sdk.checkPermission
+import com.thelightphone.sdk.rememberPermissionRequestLauncher
+import com.thelightphone.sdk.shared.LightServiceMethod
+import com.thelightphone.sdk.shared.asKotlinResult
 import com.thelightphone.sdk.rememberKeyboardOptions
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightFullscreenModal
 import com.thelightphone.sdk.ui.LightIcons
+import com.thelightphone.sdk.ui.LightQrCodeScanner
 import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextInputEditor
@@ -233,7 +241,15 @@ class AddFeedChooserScreen(
     }
 }
 
-/** Adds a subscription from a QR code containing a feed or website address. */
+/**
+ * Adds a subscription from a QR code containing a feed or website address.
+ *
+ * The SDK's client wrapper asks LightOS whether the camera is granted and gives up when that
+ * call fails, which is what a sideloaded tool sees: the server refuses the request and the
+ * screen dead-ends on "unable to request camera permission". This screen drives the UI-level
+ * scanner directly so a server that will not answer becomes a warning rather than a wall — the
+ * permission request is still attempted, and CameraX is allowed to try regardless.
+ */
 class ScanFeedScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
@@ -245,6 +261,8 @@ class ScanFeedScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val state by viewModel.state.collectAsState()
+        val permissionLauncher = rememberPermissionRequestLauncher(Manifest.permission.CAMERA)
+        var serverNotice by remember { mutableStateOf<String?>(null) }
 
         // The scanner reports failures through state so nothing navigates from the camera callback.
         LaunchedEffect(state.error) {
@@ -267,16 +285,72 @@ class ScanFeedScreen(
                     LoadingScreen("Finding feed…", Modifier.weight(1f))
                 }
             } else {
-                // A fresh key re-arms the scanner's one-shot latch after a rejected code.
-                key(state.inputSession) {
-                    LightQrCodeScanner(
-                        title = "Scan feed",
-                        onScanned = { scanned ->
-                            viewModel.addScannedFeed(scanned) { feedId -> goBack(feedId) }
-                        },
-                        onBack = { goBack() },
-                        modifier = Modifier.background(LightThemeTokens.colors.background),
-                    )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // A fresh key re-arms the scanner's one-shot latch after a rejected code.
+                    key(state.inputSession) {
+                        LightQrCodeScanner(
+                            title = "Scan feed",
+                            onScanned = { scanned ->
+                                viewModel.addScannedFeed(scanned) { feedId -> goBack(feedId) }
+                            },
+                            onBack = { goBack() },
+                            checkCameraPermission = {
+                                checkPermission(Manifest.permission.CAMERA).asKotlinResult.fold(
+                                    onSuccess = { response ->
+                                        val granted = response.permissionResult ==
+                                            LightServiceMethod.GetPermission.Result.Granted
+                                        // Let the LightOS dialog do its job when the server is
+                                        // answering; just explain the fallback if it says no.
+                                        serverNotice = if (granted) {
+                                            null
+                                        } else {
+                                            "LightOS reports ${response.permissionResult}."
+                                        }
+                                        Result.success(granted)
+                                    },
+                                    onFailure = { error ->
+                                        // LightOS would not answer. Open the camera anyway: if the
+                                        // permission really is missing the preview simply stays dark,
+                                        // and the notice below says how to grant it.
+                                        serverNotice = error.message?.takeIf { it.isNotBlank() }
+                                            ?: "LightOS did not answer the permission check."
+                                        Result.success(true)
+                                    },
+                                )
+                            },
+                            launchCameraPermissionRequest = { permissionLauncher?.launch() },
+                            modifier = Modifier.background(LightThemeTokens.colors.background),
+                        )
+                    }
+                    val notice = serverNotice
+                    if (notice != null) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(LightThemeTokens.colors.background)
+                                .padding(
+                                    horizontal = 1f.gridUnitsAsDp(),
+                                    vertical = 0.5f.gridUnitsAsDp(),
+                                ),
+                        ) {
+                            LightText(
+                                text = "CAMERA CHECK: $notice",
+                                variant = LightTextVariant.Superfine,
+                                lighten = true,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            LightText(
+                                text = "If the preview stays dark, run: adb shell pm grant " +
+                                    "com.lightrss.reader android.permission.CAMERA",
+                                variant = LightTextVariant.Superfine,
+                                lighten = true,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -713,7 +787,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.2.0",
+                            text = "VERSION 1.2.1",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

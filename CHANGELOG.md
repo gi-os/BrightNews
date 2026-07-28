@@ -8,6 +8,21 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.2.1 - 2026-07-27
+
+### Fixed
+
+- The scanner dead-ended on "unable to request camera permission". The SDK's client wrapper treats
+  a failed LightOS permission call as fatal, and LightOS refuses that call for a sideloaded tool.
+  The screen now drives the UI-level scanner directly: when the server does not answer, the camera
+  is started anyway and the screen explains how to grant the permission over adb. When the server
+  does answer, the normal LightOS permission flow is unchanged.
+- The scan screen shows the underlying server response, so a failure says what actually happened.
+
+### Changed
+
+- Article rows and thumbnails are back to their 1.1.0 size.
+
 ## 1.2.0 - 2026-07-27
 
 ### Added
