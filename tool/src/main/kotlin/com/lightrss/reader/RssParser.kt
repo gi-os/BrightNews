@@ -118,20 +118,39 @@ object RssParser {
 
     fun cleanHtml(value: String): String {
         if (value.isBlank()) return ""
-        return decodeEntities(
-            value
-                .replace(Regex("""(?is)<(script|style)\b.*?</\1>"""), " ")
-                .replace(Regex("""(?i)<br\s*/?>"""), "\n")
-                .replace(Regex("""(?i)</(p|div|li|h[1-6]|blockquote)>"""), "\n\n")
-                .replace(Regex("""(?i)<li\b[^>]*>"""), "• ")
-                .replace(Regex("""(?s)<[^>]+>"""), " "),
-        )
-            .replace('\u00A0', ' ')
+        val stripped = stripMarkup(value)
+        // Feeds that escaped their markup twice only reveal their tags once entities are decoded,
+        // so strip again afterwards rather than printing <p> at the reader.
+        val decoded = decodeEntities(stripped).let { if ('<' in it) stripMarkup(it) else it }
+        return decoded
+            .replace(' ', ' ')
             .replace(Regex("[ \\t]+"), " ")
             .replace(Regex(" *\n *"), "\n")
             .replace(Regex("\n{3,}"), "\n\n")
             .trim()
+            .removeLeadingNoise()
     }
+
+    /**
+     * Removes markup while leaving prose alone. A tag always opens with a letter, a slash, or a
+     * markup declaration, so `5 < 10` and `if (a < b)` survive.
+     */
+    private fun stripMarkup(value: String): String = value
+        .replace(Regex("""(?is)<(script|style)\b.*?</\1>"""), " ")
+        .replace(Regex("""(?s)<!--.*?-->"""), " ")
+        .replace(Regex("""(?i)<br\s*/?>"""), "\n")
+        .replace(Regex("""(?i)</(p|div|li|h[1-6]|blockquote|figcaption)>"""), "\n\n")
+        .replace(Regex("""(?i)<li\b[^>]*>"""), "• ")
+        .replace(Regex("""(?s)</?[A-Za-z!?][^>]*>"""), " ")
+        // A tag cut off by a truncated feed leaves an opening bracket with no partner.
+        .replace(Regex("""(?s)<[A-Za-z/!][^<>]*$"""), " ")
+
+    /**
+     * Drops the leading ellipsis some feeds ship in place of the opening of a story, which The
+     * Verge does on every item.
+     */
+    private fun String.removeLeadingNoise(): String =
+        replace(Regex("""^(?:\s|…|\.{2,}|·|•)+"""), "")
 
     fun parseDate(value: String?, fallback: Long): Long {
         val raw = value?.trim().orEmpty()

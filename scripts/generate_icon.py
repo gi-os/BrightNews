@@ -4,7 +4,9 @@
     python3 scripts/generate_icon.py            # defaults to R, for RSS
     python3 scripts/generate_icon.py --letter S --font /path/to/PublicSans-Regular.ttf
 
-Writes legacy mipmaps plus an adaptive icon into tool/src/main/res. Public Sans is the face used
+Writes plain bitmap mipmaps into tool/src/main/res. Deliberately no adaptive icon: tools that
+read an app's icon out of the package, Obtainium among them, hand back nothing when the icon
+resolves to an AdaptiveIconDrawable rather than a bitmap. Public Sans is the face used
 by the sibling tools; it is not vendored here, so pass --font to reproduce exactly. Without it the
 script falls back to whatever DejaVu Sans the system has, which is close enough to re-render.
 """
@@ -22,33 +24,11 @@ LEGACY_SIZES = {
     "mipmap-xxxhdpi": 192,
 }
 
-# An adaptive icon is drawn at 108dp and masked down to roughly the middle 72dp.
-ADAPTIVE_SIZES = {
-    "mipmap-mdpi": 108,
-    "mipmap-hdpi": 162,
-    "mipmap-xhdpi": 216,
-    "mipmap-xxhdpi": 324,
-    "mipmap-xxxhdpi": 432,
-}
-
 FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/System/Library/Fonts/Helvetica.ttc",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
 ]
-
-ADAPTIVE_XML = """<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background" />
-    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
-</adaptive-icon>
-"""
-
-COLORS_XML = """<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="ic_launcher_background">#000000</color>
-</resources>
-"""
 
 
 def load_font(path, size):
@@ -98,25 +78,6 @@ def main():
         icon = draw(letter, size, args.font, transparent=False, cap_fraction=0.62)
         icon.save(os.path.join(directory, "ic_launcher.png"))
         icon.save(os.path.join(directory, "ic_launcher_round.png"))
-
-    # Adaptive foreground: same letter, transparent field, sized for the mask's safe zone.
-    for bucket, size in ADAPTIVE_SIZES.items():
-        directory = os.path.join(args.res, bucket)
-        os.makedirs(directory, exist_ok=True)
-        draw(letter, size, args.font, transparent=True, cap_fraction=0.40).save(
-            os.path.join(directory, "ic_launcher_foreground.png")
-        )
-
-    anydpi = os.path.join(args.res, "mipmap-anydpi-v26")
-    os.makedirs(anydpi, exist_ok=True)
-    for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
-        with open(os.path.join(anydpi, name), "w") as handle:
-            handle.write(ADAPTIVE_XML)
-
-    values = os.path.join(args.res, "values")
-    os.makedirs(values, exist_ok=True)
-    with open(os.path.join(values, "ic_launcher_background.xml"), "w") as handle:
-        handle.write(COLORS_XML)
 
     print(f"Wrote '{letter}' icons into {args.res}")
 

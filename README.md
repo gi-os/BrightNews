@@ -58,8 +58,8 @@ exists so a bot check or login can be cleared and reused. It turns feed-provided
 
 ## Icon
 
-A white **R** on black, matching the letter-on-black icons of the sibling Light tools. Redraw it
-with a different letter or face:
+A white **R** on black, matching the letter-on-black icons of the sibling Light tools. Plain bitmap mipmaps, no adaptive layer, so anything that reads the icon out of the package gets a
+bitmap. Redraw it with a different letter or face:
 
 ```bash
 python3 scripts/generate_icon.py --letter R --font /path/to/PublicSans-Regular.ttf

@@ -3,6 +3,7 @@ package com.lightrss.reader
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -202,5 +203,57 @@ class RssParserTest {
         )
         assertFailsWith<IllegalArgumentException> { RssParser.feedUrlFromScan("   ") }
         assertFailsWith<IllegalArgumentException> { RssParser.feedUrlFromScan("WIFI:S=cafe;T=WPA;P=hunter2;; and more") }
+    }
+
+    @Test
+    fun hidesMarkupThatWasEscapedTwice() {
+        val parsed = RssParser.parse(
+            xml = """
+                <?xml version="1.0"?>
+                <rss version="2.0">
+                  <channel>
+                    <title>Double</title>
+                    <link>https://example.com/</link>
+                    <item>
+                      <guid>d1</guid>
+                      <title>Escaped markup</title>
+                      <link>https://example.com/d1</link>
+                      <description>&amp;lt;p&amp;gt;Real sentence here.&amp;lt;/p&amp;gt;&amp;lt;a href="x"&amp;gt;Link&amp;lt;/a&amp;gt;</description>
+                    </item>
+                  </channel>
+                </rss>
+            """.trimIndent(),
+            sourceUrl = "https://example.com/feed.xml",
+        )
+
+        val summary = parsed.items.single().summary
+        assertFalse("<p>" in summary, "tags revealed by decoding should be stripped")
+        assertFalse("href" in summary, "attributes should not reach the reader")
+        assertTrue("Real sentence here." in summary)
+    }
+
+    @Test
+    fun keepsAngleBracketsThatAreNotTags() {
+        assertEquals("Use 5 < 10 and 12 > 3 in code.", RssParser.cleanHtml("Use 5 &lt; 10 and 12 &gt; 3 in code."))
+        assertEquals("if (a < b) return", RssParser.cleanHtml("<p>if (a &lt; b) return</p>"))
+    }
+
+    @Test
+    fun dropsALeadingEllipsis() {
+        assertEquals("The story starts here.", RssParser.cleanHtml("\u2026 The story starts here."))
+        assertEquals("The story starts here.", RssParser.cleanHtml("<p>... The story starts here.</p>"))
+        assertEquals("The story starts here.", RssParser.cleanHtml("\u2026\u2026The story starts here."))
+        // A single period is part of the sentence, not noise.
+        assertEquals(".38 calibre", RssParser.cleanHtml(".38 calibre"))
+    }
+
+    @Test
+    fun swallowsATagCutOffByATruncatedFeed() {
+        assertEquals("Ends mid tag", RssParser.cleanHtml("<p>Ends mid tag</p><img src=\"https://example.com/a.jpg"))
+    }
+
+    @Test
+    fun stripsCommentsAndKeepsListBullets() {
+        assertEquals("First\n\n• One\n\n• Two", RssParser.cleanHtml("<p>First</p><!-- hidden > note --><ul><li>One</li><li>Two</li></ul>"))
     }
 }

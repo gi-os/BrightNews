@@ -15,14 +15,14 @@ built by CI from a tagged commit and signed with a personal sideload key.
 
 ```bash
 adb devices                                # confirm the phone is listed
-adb install -r LightRSS-1.9.0.apk          # -r replaces an existing install
+adb install -r LightRSS-1.10.0.apk         # -r replaces an existing install
 ```
 
 Verify what you are installing first:
 
 ```bash
-sha256sum -c LightRSS-1.9.0.apk.sha256
-apksigner verify --print-certs LightRSS-1.9.0.apk
+sha256sum -c LightRSS-1.10.0.apk.sha256
+apksigner verify --print-certs LightRSS-1.10.0.apk
 ```
 
 The signing certificate should report this SHA-256 fingerprint on every release:

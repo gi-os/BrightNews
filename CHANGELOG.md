@@ -8,6 +8,23 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.10.0 - 2026-07-28
+
+### Fixed
+
+- Markup no longer leaks into article text. Feeds that escape their HTML twice only reveal their
+  tags once entities are decoded, and the old order of operations decoded last, so `<p>` and stray
+  attributes were being printed. Tags are now stripped again after decoding.
+- Angle brackets that are not markup survive: `5 < 10` and `if (a < b)` read as written, because a
+  tag has to open with a letter, a slash, or a markup declaration.
+- Comments are dropped even when they contain a `>`, and a tag left unterminated by a truncated
+  feed no longer prints as text.
+- Posts that begin with an ellipsis — The Verge does this on every item — no longer start with
+  three dots. A single leading period, as in `.38 calibre`, is left alone.
+- The launcher icon dropped its adaptive layer. Tools that read an icon out of an installed
+  package, Obtainium among them, can hand back nothing when the icon resolves to an
+  `AdaptiveIconDrawable` instead of a bitmap; plain mipmaps avoid the question.
+
 ## 1.9.0 - 2026-07-28
 
 ### Added
