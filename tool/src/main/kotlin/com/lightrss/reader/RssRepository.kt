@@ -25,6 +25,12 @@ import java.net.URI
 /** A fetched web page and the address it finally resolved to after any redirects. */
 data class PageDocument(val html: String, val url: String)
 
+/**
+ * Reader-mode result: the extracted page, the address it actually came from, and whether the
+ * publisher put a bot check or sign-in wall in the way instead of the article.
+ */
+data class ReaderResult(val page: ReaderPage, val url: String, val gated: Boolean)
+
 sealed interface FeedLoadResult {
     data class Loaded(
         val feed: ParsedFeed,
@@ -231,14 +237,14 @@ class RssRepository(
 
     fun clearImageCache() = images?.clear()
 
-    private val readerPages = mutableMapOf<String, ReaderPage>()
+    private val readerPages = mutableMapOf<String, ReaderResult>()
     private val readerLock = Mutex()
 
     /**
      * Reader-mode version of an article's linked page. Cached per session so paging back and
      * forth does not re-fetch, and so the page stays readable once it has been downloaded.
      */
-    suspend fun readerPage(articleId: String, url: String, refresh: Boolean = false): ReaderPage {
+    suspend fun readerPage(articleId: String, url: String, refresh: Boolean = false): ReaderResult {
         if (url.isBlank()) throw IllegalArgumentException("This article has no link to open.")
         if (!refresh) {
             readerLock.withLock { readerPages[articleId] }?.let { return it }
@@ -266,11 +272,16 @@ class RssRepository(
             }
         }
 
+        val result = ReaderResult(
+            page = page,
+            url = document.url,
+            gated = ReaderExtractor.isGate(document.html, page),
+        )
         readerLock.withLock {
             if (readerPages.size >= MAX_CACHED_READER_PAGES) readerPages.clear()
-            readerPages[articleId] = page
+            readerPages[articleId] = result
         }
-        return page
+        return result
     }
 
     suspend fun initialize() {

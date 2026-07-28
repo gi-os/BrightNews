@@ -269,6 +269,8 @@ data class ReaderPageUiState(
     val isLoading: Boolean = true,
     val page: ReaderPage? = null,
     val error: String? = null,
+    /** Where the article actually resolved to, which is what the browser should open. */
+    val resolvedUrl: String = "",
 )
 
 /** Fetches and holds the reader-mode version of an article's linked page. */
@@ -291,13 +293,20 @@ class ReaderPageViewModel(
         _state.update { it.copy(isLoading = true, error = null) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val page = repository.readerPage(articleId, url, refresh)
-                val readable = with(ReaderExtractor) { page.hasContent() }
+                val result = repository.readerPage(articleId, url, refresh)
+                val readable = with(ReaderExtractor) { result.page.hasContent() } && !result.gated
                 _state.update {
                     it.copy(
                         isLoading = false,
-                        page = page.takeIf { readable },
-                        error = if (readable) null else "This page did not give up any readable text.",
+                        page = result.page.takeIf { readable },
+                        resolvedUrl = result.url,
+                        error = when {
+                            readable -> null
+                            result.gated ->
+                                "This site is checking your browser or asking you to sign in. " +
+                                    "Open it in a browser to get through, then try again."
+                            else -> "This page did not give up any readable text."
+                        },
                     )
                 }
             } catch (error: CancellationException) {

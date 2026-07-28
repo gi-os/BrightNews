@@ -41,6 +41,7 @@ Screenshots are from the 1080 × 1240 LightOS emulator and show public feed cont
 - Supports unread/all views, per-feed timelines, local search, saved articles, mark-all-read, archive, and unfollow.
 - Keeps feed-provided text available offline after it has been downloaded.
 - Opens the linked page in a built-in reader view: body copy and images only, extracted without a browser.
+- Recognises bot checks and subscriber walls, and can hand the link to a browser so they can be cleared.
 - Uses defensive XML parsing with DTD processing and external entities disabled.
 - Includes light/dark appearance switching and local cleanup controls.
 - Shows feed images: a thumbnail per article row and full-width images in the reader, downsampled and rendered greyscale for the Light Phone display.

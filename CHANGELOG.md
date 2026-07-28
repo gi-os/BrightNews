@@ -8,6 +8,26 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.7.0 - 2026-07-27
+
+### Added
+
+- SIGN IN at the bottom of reader mode hands the article's address to whatever app on the phone
+  opens web links, so a bot check or subscriber wall can be cleared where it can actually be
+  cleared. It opens the resolved address, not the redirector the feed linked to. If nothing on the
+  phone handles web links, the screen says so rather than doing nothing.
+- Bot checks and sign-in walls are now recognised instead of being reported as an empty page:
+  "This site is checking your browser or asking you to sign in." Detection looks for challenge
+  scripts from the usual vendors, and for wall phrasing — but the phrasing only counts when
+  nothing readable came out, since plenty of complete articles carry a subscribe promo.
+- The address is shown on the failure screen, so it can be read off or copied even without a
+  browser installed.
+
+### Changed
+
+- The vendored light-sdk plugin permits `android.content.Intent` and `startActivity` for this one
+  purpose. All in-app navigation still goes through `LightScreen.navigateTo()`.
+
 ## 1.6.1 - 2026-07-27
 
 ### Fixed

@@ -13,6 +13,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -706,7 +707,10 @@ class ReaderPageScreen(
         val colors by LightThemeController.colors.collectAsState()
         val state by viewModel.state.collectAsState()
         val imageStore = rememberImageStore(repository)
+        val openLink = rememberLinkOpener()
+        var linkNotice by remember { mutableStateOf<String?>(null) }
         val page = state.page
+        val target = state.resolvedUrl.ifBlank { link }
 
         LightTheme(colors = colors) {
             Column(
@@ -759,16 +763,55 @@ class ReaderPageScreen(
                         }
                     }
 
-                    else -> {
-                        EmptyState(
-                            state.error ?: "That page could not be opened.",
-                            Modifier.weight(1f),
-                        )
-                        LightBottomBar(
-                            items = listOf(LightBarButton.Text("RETRY", onClick = viewModel::retry)),
-                        )
+                    else -> LightScrollView(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(
+                                horizontal = 1f.gridUnitsAsDp(),
+                                vertical = 1f.gridUnitsAsDp(),
+                            ),
+                        ) {
+                            LightText(
+                                text = state.error ?: "That page could not be opened.",
+                                variant = LightTextVariant.Paragraph,
+                            )
+                            LightText(
+                                text = target,
+                                variant = LightTextVariant.Superfine,
+                                lighten = true,
+                                modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
+                            )
+                        }
                     }
                 }
+
+                val notice = linkNotice
+                if (notice != null) {
+                    StatusLine(notice)
+                }
+
+                LightBottomBar(
+                    items = listOfNotNull(
+                        LightBarButton.Text(
+                            text = "SIGN IN",
+                            onClick = {
+                                linkNotice = if (openLink(target)) {
+                                    null
+                                } else {
+                                    "No app on this phone opens web links."
+                                }
+                            },
+                        ),
+                        if (page == null) {
+                            LightBarButton.Text("RETRY", onClick = viewModel::retry)
+                        } else {
+                            null
+                        },
+                    ),
+                )
             }
         }
     }
@@ -853,7 +896,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.6.1",
+                            text = "VERSION 1.7.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

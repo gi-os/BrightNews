@@ -144,4 +144,38 @@ class ReaderExtractorTest {
             ReaderExtractor.ampUrl(amp, "https://news.example.com/story"),
         )
     }
+
+    @Test
+    fun recognisesABotCheckInterstitial() {
+        val html = """
+            <html><head><title>Just a moment...</title></head><body>
+              <h1>Thank you for your patience while we verify access.</h1>
+              <p>Please enable JavaScript and cookies to continue to the article you requested.</p>
+              <script src="/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1"></script>
+            </body></html>
+        """.trimIndent()
+        val page = ReaderExtractor.extract(html, "https://paper.example.com/story")
+
+        assertTrue(ReaderExtractor.isGate(html, page), "verification page should be flagged")
+    }
+
+    @Test
+    fun recognisesASubscriptionWall() {
+        val html = """
+            <html><body><div class="paywall-inline">
+              <h2>Subscribe to continue reading</h2>
+              <p>Create an account to keep reading this story and get unlimited access today.</p>
+            </div></body></html>
+        """.trimIndent()
+        val page = ReaderExtractor.extract(html, "https://paper.example.com/story")
+
+        assertTrue(ReaderExtractor.isGate(html, page))
+    }
+
+    @Test
+    fun doesNotFlagAnOrdinaryArticleAsAGate() {
+        val page = ReaderExtractor.extract(articlePage, "https://news.example.com/trains/story")
+
+        assertFalse(ReaderExtractor.isGate(articlePage, page))
+    }
 }

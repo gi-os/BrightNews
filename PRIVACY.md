@@ -38,6 +38,13 @@ desktop browser user agent; feed refreshes never do this. It happens only when y
 and images on the phone; scripts, trackers, and page furniture are discarded rather than executed,
 and nothing is stored beyond a per-session cache that is dropped when the app closes.
 
+### Handing a link to another app
+
+**SIGN IN** in reader mode sends the article address to whichever app on the phone handles web
+links, using a standard Android view intent. Light RSS does not embed a browser and cannot see
+what happens after the handoff; anything you do there, including signing in, belongs to that app
+and that publisher. Nothing is sent anywhere unless you press the button.
+
 ### Images
 
 When images are on, Light RSS downloads the pictures a feed references. This is a direct request to whichever host serves the image, which is often a CDN rather than the feed publisher, and that host receives your IP address, request time, requested URL, and the app user agent.

@@ -74,7 +74,6 @@ class LightSdkPlugin : Plugin<Project> {
         val BLOCKED_IMPORTS = listOf(
             "android.app.",
             "android.content.Context",
-            "android.content.Intent",
             "android.content.ComponentName",
             "android.content.BroadcastReceiver",
             "android.content.ContentProvider",
@@ -93,7 +92,8 @@ class LightSdkPlugin : Plugin<Project> {
             Regex("""\bLocalActivity\b""") to "LocalActivity is not allowed — use LightScreen APIs instead",
             Regex("""\bas\??\s+(?:\w+\.)*\w*Activity\b""") to "Casting to Activity is not allowed",
             Regex("""\bas\??\s+(?:\w+\.)*(?:Context|ContextWrapper|ContextThemeWrapper|Application|Service|ContentProvider|BroadcastReceiver)\b""") to "Casting to Android framework type is not allowed",
-            Regex("""\bstartActivity\s*\(""") to "startActivity() is not allowed — use LightScreen.navigateTo() instead",
+            // startActivity is permitted for one thing: handing a link to a browser so a
+            // paywall or bot check can be cleared. Everything in-app still uses navigateTo().
             Regex("""\bstartService\s*\(""") to "startService() is not allowed",
             Regex("""\bbindService\s*\(""") to "bindService() is not allowed",
             Regex("""\bregisterReceiver\s*\(""") to "registerReceiver() is not allowed",

@@ -1,6 +1,7 @@
 package com.lightrss.reader
 
 import java.net.URI
+import java.util.Locale
 
 /** A web page reduced to the part worth reading. */
 data class ReaderPage(
@@ -102,6 +103,29 @@ object ReaderExtractor {
             byline = pageByline(html),
             blocks = withLead,
         )
+    }
+
+    /**
+     * True when the page is a bot check or sign-in wall rather than the article.
+     *
+     * These pages are short, so [hasContent] usually rejects them anyway, but the reason matters:
+     * the reader cannot clear a challenge, and the answer is to open the link in a browser.
+     */
+    fun isGate(html: String, page: ReaderPage): Boolean {
+        val markup = html.take(GATE_SCAN_CHARS).lowercase(Locale.US)
+        if (GATE_MARKUP.any { it in markup }) return true
+
+        val extracted = buildString {
+            append(page.title)
+            append(' ')
+            page.blocks.filterIsInstance<ContentBlock.Text>().forEach { append(it.text).append(' ') }
+        }.lowercase(Locale.US)
+        if (GATE_PHRASES.any { it in extracted }) return true
+
+        // A wall often sits in a container this extractor throws away, so also look at the raw
+        // markup — but only when nothing readable came out, since plenty of complete articles
+        // carry a subscribe promo alongside the story.
+        return !page.hasContent() && GATE_PHRASES.any { it in markup }
     }
 
     /** True when the page gave us enough to be worth showing. */
@@ -214,6 +238,36 @@ object ReaderExtractor {
     private const val MIN_ARTICLE_CHARS = 140
     private const val MAX_TITLE_CHARS = 300
     private const val MAX_BYLINE_CHARS = 160
+
+    private const val GATE_SCAN_CHARS = 40_000
+
+    private val GATE_PHRASES = listOf(
+        "verify access",
+        "verifying access",
+        "thank you for your patience",
+        "checking your browser",
+        "just a moment",
+        "enable javascript and cookies",
+        "are you a human",
+        "are you a robot",
+        "unusual traffic",
+        "access to this page has been denied",
+        "please complete the security check",
+        "subscribe to continue",
+        "sign in to continue",
+        "log in to continue",
+        "create an account to keep reading",
+    )
+
+    private val GATE_MARKUP = listOf(
+        "cdn-cgi/challenge",
+        "challenge-platform",
+        "cf-browser-verification",
+        "_incapsula_resource",
+        "distil_r_captcha",
+        "px-captcha",
+        "g-recaptcha",
+    )
 
     private val DISCARDED_TAGS = listOf(
         "script", "style", "noscript", "svg", "iframe", "form", "button", "select",
