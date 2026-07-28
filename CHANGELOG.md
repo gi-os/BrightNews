@@ -8,6 +8,22 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.9.0 - 2026-07-28
+
+### Added
+
+- A launcher icon, in the same style as the other Light tools: a white letter on black, here an R
+  for RSS. Shipped as legacy mipmaps for every density plus an adaptive icon, with a black
+  background colour and the letter as the foreground layer.
+- `scripts/generate_icon.py` draws it, so the letter or face can be changed in one command. It
+  sizes the glyph by its own bounding box rather than its line height, which is what keeps it
+  optically centred.
+
+### Changed
+
+- The generated manifest points `android:icon` and `android:roundIcon` at `@mipmap/ic_launcher`,
+  so a tool that ships those resources gets its icon on the launcher.
+
 ## 1.8.0 - 2026-07-27
 
 ### Changed

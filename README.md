@@ -56,6 +56,18 @@ Screenshots are from the 1080 × 1240 LightOS emulator and show public feed cont
 typography. Reader mode uses no WebView; the only WebView in the app is the SIGN IN screen, which
 exists so a bot check or login can be cleared and reused. It turns feed-provided HTML into a focused reading view of text and, when images are enabled, the pictures the publisher placed in the article. Scripts, advertisements, and tracking pixels are never loaded, and images can be switched off entirely in Settings.
 
+## Icon
+
+A white **R** on black, matching the letter-on-black icons of the sibling Light tools. Redraw it
+with a different letter or face:
+
+```bash
+python3 scripts/generate_icon.py --letter R --font /path/to/PublicSans-Regular.ttf
+```
+
+Public Sans is the face the other tools use; it is not vendored here, so pass `--font` to
+reproduce the committed art exactly. Without it the script falls back to a system sans.
+
 ## Built for LightOS
 
 The UI is deliberately compact and uses the SDK rather than imitating it:

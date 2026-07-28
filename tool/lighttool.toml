@@ -1,8 +1,8 @@
 [tool]
 id = "com.lightrss.reader"
 label = "RSS"
-versionCode = 11
-versionName = "1.8.0"
+versionCode = 12
+versionName = "1.9.0"
 permissions = [
     "android.permission.INTERNET",
     "android.permission.CAMERA",

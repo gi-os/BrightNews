@@ -7,6 +7,8 @@ package com.thelightphone.plugin
  * LightActivity + LightSdkReceiver + SDK-marker query). The only variation
  * across tools is the label and the set of `<uses-permission>` entries.
  *
+ * The application element points at `@mipmap/ic_launcher`, so a tool must ship that resource.
+ *
  * All user-controlled strings have already been validated, but we XML-escape
  * them anyway so a future loosening of the validators can't open a manifest
  * injection.
@@ -31,6 +33,9 @@ object ManifestGenerator {
         appendLine("""    <application""")
         appendLine("""        android:name="com.thelightphone.sdk.LightSdkApplication"""")
         appendLine("""        android:label="${xmlAttr(metadata.label)}"""")
+        // Tools that ship a launcher icon in tool/src/main/res get to use it.
+        appendLine("""        android:icon="@mipmap/ic_launcher"""")
+        appendLine("""        android:roundIcon="@mipmap/ic_launcher_round"""")
         appendLine("""        android:supportsRtl="true"""")
         appendLine("""        android:theme="@style/LightSdk.Theme.Splash">""")
         appendLine("""        <meta-data""")
