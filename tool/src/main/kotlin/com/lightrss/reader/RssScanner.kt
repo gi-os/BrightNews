@@ -1,6 +1,8 @@
 package com.lightrss.reader
 
 import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.mlkit.vision.MlKitAnalyzer
 import androidx.camera.view.CameraController
@@ -66,6 +68,16 @@ fun FeedQrScanner(
     var status by remember { mutableStateOf<String?>(null) }
     var asked by remember { mutableStateOf(false) }
 
+    // Android's own permission prompt, used when LightOS will not put its dialog up.
+    val systemRequest = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        androidGranted = granted
+        if (!granted) {
+            status = "Android refused the camera. Grant it with the command below."
+        }
+    }
+
     // Re-checks every time the screen resumes, which covers coming back from the LightOS
     // permission dialog. Same shape as the LightPass permission gate.
     LaunchedEffect(lifecycleOwner) {
@@ -78,15 +90,17 @@ fun FeedQrScanner(
                 return@repeatOnLifecycle
             }
 
-            // Not granted yet: ask LightOS to put its permission dialog up, once per visit.
+            // Not granted yet. Prefer the LightOS dialog, but it only exists if the server is
+            // willing to talk to us; when it is not, fall back to Android's own prompt.
             val server = checkPermission(Manifest.permission.CAMERA).asKotlinResult
+            val serverAnswered = server.isSuccess
             status = server.fold(
                 onSuccess = { "LightOS: ${it.permissionResult}" },
-                onFailure = { "LightOS did not answer the permission check" },
+                onFailure = { "LightOS did not answer — asking Android directly" },
             )
             if (!asked) {
                 asked = true
-                launcher?.launch()
+                if (serverAnswered) launcher?.launch() else systemRequest.launch(Manifest.permission.CAMERA)
             }
         }
     }

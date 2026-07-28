@@ -12,6 +12,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -204,7 +207,7 @@ class AddFeedChooserScreen(
                 SettingsRow("SCAN QR CODE", "Point the camera at a feed code") {
                     navigateTo({ ScanFeedScreen(it, repository) }) { feedId -> goBack(feedId) }
                 }
-                SettingsRow("TYPE ADDRESS", "Enter a website or feed URL") {
+                SettingsRow("PASTE OR TYPE", "Phone keyboard, with a paste button") {
                     navigateTo({ AddFeedScreen(it, repository) }) { feedId -> goBack(feedId) }
                 }
                 Column(
@@ -304,6 +307,7 @@ class AddFeedScreen(
         val state by viewModel.state.collectAsState()
         val input = key(state.inputSession) { rememberTextFieldState(state.draft) }
         val keyboard = rememberKeyboardOptions()
+        var lightKeys by rememberSaveable { mutableStateOf(false) }
 
         LaunchedEffect(state.error) {
             val message = state.error ?: return@LaunchedEffect
@@ -311,37 +315,55 @@ class AddFeedScreen(
             navigateTo({ MessageScreen(it, message) })
         }
 
+        val submit: (CharSequence) -> Unit = { raw ->
+            viewModel.addFeed(
+                rawUrl = raw,
+                onAdded = { feedId -> goBack(feedId) },
+                onError = viewModel::reportError,
+            )
+        }
+
         LightTheme(colors = colors) {
-            if (state.isAdding) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(LightThemeTokens.colors.background),
-                ) {
-                    LightTopBar(
-                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                        center = LightTopBarCenter.Text("Feed URL"),
-                    )
-                    LoadingScreen("Finding feed…", Modifier.weight(1f))
-                }
-            } else {
-                LightTextInputEditor(
-                    title = "Feed URL",
-                    editorKey = state.inputSession,
-                    keyboardOptionsFlow = keyboard,
-                    state = input,
-                    onSubmit = { raw ->
-                        viewModel.addFeed(
-                            rawUrl = raw,
-                            onAdded = { feedId -> goBack(feedId) },
-                            onError = viewModel::reportError,
+            when {
+                state.isAdding -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(LightThemeTokens.colors.background),
+                    ) {
+                        LightTopBar(
+                            leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                            center = LightTopBarCenter.Text("Feed URL"),
                         )
-                    },
-                    onBack = { goBack() },
-                    submitIcon = LightIcons.ADD,
-                    showBackButton = true,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                        LoadingScreen("Finding feed\u2026", Modifier.weight(1f))
+                    }
+                }
+
+                lightKeys -> {
+                    LightTextInputEditor(
+                        title = "Feed URL",
+                        editorKey = state.inputSession,
+                        keyboardOptionsFlow = keyboard,
+                        state = input,
+                        onSubmit = submit,
+                        onBack = { lightKeys = false },
+                        submitIcon = LightIcons.ADD,
+                        showBackButton = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                else -> {
+                    SystemTextEntry(
+                        title = "Feed URL",
+                        state = input,
+                        submitLabel = "ADD",
+                        hint = "https://example.com/feed.xml",
+                        onSubmit = submit,
+                        onBack = { goBack() },
+                        onUseLightKeys = { lightKeys = true },
+                    )
+                }
             }
         }
     }
@@ -499,22 +521,35 @@ class SearchScreen(
         val state by viewModel.state.collectAsState()
         val results by viewModel.results.collectAsState()
         val imageStore = rememberImageStore(repository)
-        val input = rememberTextFieldState(state.query)
+        val input = key(state.editorSession) { rememberTextFieldState(state.query) }
         val keyboard = rememberKeyboardOptions()
+        var lightKeys by rememberSaveable { mutableStateOf(false) }
 
         LightTheme(colors = colors) {
             if (state.editorOpen) {
-                LightTextInputEditor(
-                    title = "Search",
-                    editorKey = state.editorSession,
-                    keyboardOptionsFlow = keyboard,
-                    state = input,
-                    onSubmit = viewModel::submit,
-                    onBack = { goBack() },
-                    submitIcon = LightIcons.SEARCH,
-                    showBackButton = true,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                if (lightKeys) {
+                    LightTextInputEditor(
+                        title = "Search",
+                        editorKey = state.editorSession,
+                        keyboardOptionsFlow = keyboard,
+                        state = input,
+                        onSubmit = viewModel::submit,
+                        onBack = { lightKeys = false },
+                        submitIcon = LightIcons.SEARCH,
+                        showBackButton = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    SystemTextEntry(
+                        title = "Search",
+                        state = input,
+                        submitLabel = "SEARCH",
+                        hint = "Words in a title or article",
+                        onSubmit = viewModel::submit,
+                        onBack = { goBack() },
+                        onUseLightKeys = { lightKeys = true },
+                    )
+                }
             } else {
                 Column(
                     modifier = Modifier
@@ -721,7 +756,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.4.0",
+                            text = "VERSION 1.5.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

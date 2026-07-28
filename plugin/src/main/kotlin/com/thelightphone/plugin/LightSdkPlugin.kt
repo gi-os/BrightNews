@@ -80,7 +80,6 @@ class LightSdkPlugin : Plugin<Project> {
             "android.content.ContentProvider",
             "android.content.ServiceConnection",
             "androidx.compose.ui.platform.LocalView",
-            "androidx.activity.",
             "androidx.appcompat.",
             "java.lang.reflect.",
             "java.lang.invoke.",

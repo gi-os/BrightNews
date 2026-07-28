@@ -47,6 +47,7 @@ Screenshots are from the 1080 × 1240 LightOS emulator and show public feed cont
 - Downloads images lazily, only for rows and articles on screen, into an 8 MB memory cache and a 24 MB disk cache.
 - Adds subscriptions by scanning a QR code with the SDK scanner, accepting bare URLs, `feed://` and `rss://` schemes, and codes that wrap an address in text.
 - Pairs with a browser-side [QR code generator](https://gi-os.github.io/LightRSS) for turning a feed address into a scannable code.
+- Takes feed addresses by paste, by the phone's own keyboard, or by the Light keyboard, whichever is least painful.
 - Keeps a Settings switch for images: turn them off for a text-only reader, or clear the cache and keep them on.
 
 Light RSS does not use a WebView or open article pages. It turns feed-provided HTML into a focused reading view of text and, when images are enabled, the pictures the publisher placed in the article. Scripts, advertisements, and tracking pixels are never loaded, and images can be switched off entirely in Settings.

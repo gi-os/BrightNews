@@ -8,6 +8,22 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.5.0 - 2026-07-27
+
+### Added
+
+- A PASTE button on feed entry and search. Feed addresses are long and usually already on a
+  clipboard, and the Light keyboard is the slowest way to enter one.
+- Feed entry and search now use the phone's own keyboard by default, with a URL keyboard layout
+  and a Go key that submits. A KEYS button hands the same field to the Light keyboard for anyone
+  who prefers it, or for a device with no system IME.
+
+### Fixed
+
+- When LightOS declines to answer the permission check, the scanner now raises Android's own
+  permission prompt instead of leaving the camera unreachable. The LightOS dialog is still
+  preferred whenever the server is willing to answer.
+
 ## 1.4.0 - 2026-07-27
 
 ### Changed
