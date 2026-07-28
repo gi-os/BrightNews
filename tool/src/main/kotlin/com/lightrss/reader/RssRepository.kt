@@ -99,11 +99,18 @@ class RssApi {
      * actually lands. Sites that turn away the Light RSS user agent are retried once as a desktop
      * browser, which is what the reader is standing in for.
      */
-    suspend fun loadPage(url: String): PageDocument {
+    suspend fun loadPage(
+        url: String,
+        cookies: String? = null,
+        userAgent: String? = null,
+    ): PageDocument {
         val normalized = normalizeUrl(url)
-        var response = pageRequest(normalized, USER_AGENT)
-        if (response.status.value in BLOCKED_STATUSES) {
-            response = pageRequest(normalized, BROWSER_USER_AGENT)
+        // A cookie earned in the sign-in view is only accepted alongside the user agent that
+        // earned it, so prefer that pair when we have one.
+        val firstAgent = userAgent?.takeIf { it.isNotBlank() } ?: USER_AGENT
+        var response = pageRequest(normalized, firstAgent, cookies)
+        if (response.status.value in BLOCKED_STATUSES && firstAgent == USER_AGENT) {
+            response = pageRequest(normalized, BROWSER_USER_AGENT, cookies)
         }
         if (response.status.value in BLOCKED_STATUSES) {
             throw IllegalStateException(
@@ -127,11 +134,16 @@ class RssApi {
         )
     }
 
-    private suspend fun pageRequest(url: String, userAgent: String): HttpResponse =
+    private suspend fun pageRequest(
+        url: String,
+        userAgent: String,
+        cookies: String?,
+    ): HttpResponse =
         client.get(url) {
             header(HttpHeaders.UserAgent, userAgent)
             header(HttpHeaders.Accept, "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
             header(HttpHeaders.AcceptLanguage, "en-US,en;q=0.9")
+            if (!cookies.isNullOrBlank()) header(HttpHeaders.Cookie, cookies)
         }
 
     /** Fetches raw image bytes for the reader. Returns null for anything that is not an image. */
@@ -244,20 +256,44 @@ class RssRepository(
      * Reader-mode version of an article's linked page. Cached per session so paging back and
      * forth does not re-fetch, and so the page stays readable once it has been downloaded.
      */
+    /** Keeps the cookies and user agent from the sign-in view, per host. */
+    suspend fun setSiteAccess(url: String, cookies: String?, userAgent: String?) {
+        val host = hostOf(url) ?: return
+        if (!cookies.isNullOrBlank()) dao.putMetadata(AppMetadataEntity("$COOKIE_KEY$host", cookies))
+        if (!userAgent.isNullOrBlank()) dao.putMetadata(AppMetadataEntity("$AGENT_KEY$host", userAgent))
+        readerLock.withLock { readerPages.clear() }
+    }
+
+    /** True when this article's host has a stored sign-in. */
+    suspend fun hasSiteAccess(url: String): Boolean {
+        val host = hostOf(url) ?: return false
+        return !dao.getMetadata("$COOKIE_KEY$host").isNullOrBlank()
+    }
+
+    private suspend fun fetchPage(url: String): PageDocument {
+        val host = hostOf(url)
+        val cookies = host?.let { dao.getMetadata("$COOKIE_KEY$it") }
+        val agent = host?.let { dao.getMetadata("$AGENT_KEY$it") }
+        return api.loadPage(url, cookies, agent)
+    }
+
+    private fun hostOf(url: String): String? =
+        runCatching { URI(url).host?.lowercase()?.removePrefix("www.") }.getOrNull()
+
     suspend fun readerPage(articleId: String, url: String, refresh: Boolean = false): ReaderResult {
         if (url.isBlank()) throw IllegalArgumentException("This article has no link to open.")
         if (!refresh) {
             readerLock.withLock { readerPages[articleId] }?.let { return it }
         }
 
-        var document = api.loadPage(url)
+        var document = fetchPage(url)
 
         // Feeds link through redirectors and tracking variants. Take the page's word for where
         // the real article lives before deciding there is nothing to read.
         val hop = ReaderExtractor.metaRefreshUrl(document.html, document.url)
             ?: ReaderExtractor.canonicalUrl(document.html, document.url)
         if (hop != null) {
-            runCatching { api.loadPage(hop) }.getOrNull()?.let { document = it }
+            runCatching { fetchPage(hop) }.getOrNull()?.let { document = it }
         }
 
         var page = ReaderExtractor.extract(document.html, document.url)
@@ -265,7 +301,7 @@ class RssRepository(
         // Some publishers keep a lighter AMP copy that a text reader can actually use.
         if (!with(ReaderExtractor) { page.hasContent() }) {
             ReaderExtractor.ampUrl(document.html, document.url)?.let { amp ->
-                runCatching { api.loadPage(amp) }.getOrNull()?.let { ampDocument ->
+                runCatching { fetchPage(amp) }.getOrNull()?.let { ampDocument ->
                     val ampPage = ReaderExtractor.extract(ampDocument.html, ampDocument.url)
                     if (with(ReaderExtractor) { ampPage.hasContent() }) page = ampPage
                 }
@@ -410,6 +446,8 @@ class RssRepository(
 
     companion object {
         private const val MAX_CACHED_READER_PAGES = 12
+        private const val COOKIE_KEY = "site_cookies:"
+        private const val AGENT_KEY = "site_agent:"
         private const val STARTER_FEEDS_KEY = "starter_feeds_added"
         private const val SHOW_IMAGES_KEY = "show_images"
         private const val AUTO_REFRESH_AGE_MS = 15 * 60 * 1_000L

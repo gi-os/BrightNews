@@ -38,12 +38,20 @@ desktop browser user agent; feed refreshes never do this. It happens only when y
 and images on the phone; scripts, trackers, and page furniture are discarded rather than executed,
 and nothing is stored beyond a per-session cache that is dropped when the app closes.
 
-### Handing a link to another app
+### Signing in
 
-**SIGN IN** in reader mode sends the article address to whichever app on the phone handles web
-links, using a standard Android view intent. Light RSS does not embed a browser and cannot see
-what happens after the handoff; anything you do there, including signing in, belongs to that app
-and that publisher. Nothing is sent anywhere unless you press the button.
+**SIGN IN** in reader mode opens that one page in a WebView inside the app. This is the only
+WebView in Light RSS and the only place a page's own scripts, cookies, and local storage are
+allowed to run, which is unavoidable: a bot check cannot be cleared without executing it, and a
+login cannot be completed without one.
+
+What is kept when you leave that screen:
+
+- the cookies the site set, stored in the local database under the site's host;
+- the user agent string the WebView used, because the cookie is usually only honoured alongside it.
+
+Both are then sent on later reader-mode fetches of that host, and on nothing else. Feed refreshes
+never send them. Uninstalling the app removes them along with the rest of its data.
 
 ### Images
 

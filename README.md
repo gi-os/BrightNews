@@ -41,7 +41,7 @@ Screenshots are from the 1080 × 1240 LightOS emulator and show public feed cont
 - Supports unread/all views, per-feed timelines, local search, saved articles, mark-all-read, archive, and unfollow.
 - Keeps feed-provided text available offline after it has been downloaded.
 - Opens the linked page in a built-in reader view: body copy and images only, extracted without a browser.
-- Recognises bot checks and subscriber walls, and can hand the link to a browser so they can be cleared.
+- Recognises bot checks and subscriber walls, and can clear them in an in-app sign-in view whose cookies the reader then reuses.
 - Uses defensive XML parsing with DTD processing and external entities disabled.
 - Includes light/dark appearance switching and local cleanup controls.
 - Shows feed images: a thumbnail per article row and full-width images in the reader, downsampled and rendered greyscale for the Light Phone display.
@@ -53,7 +53,8 @@ Screenshots are from the 1080 × 1240 LightOS emulator and show public feed cont
 - Keeps a Settings switch for images: turn them off for a text-only reader, or clear the cache and keep them on.
 
 **OPEN** on any article fetches the linked page and renders a reader-mode version of it in Light
-typography. Light RSS does not use a WebView. It turns feed-provided HTML into a focused reading view of text and, when images are enabled, the pictures the publisher placed in the article. Scripts, advertisements, and tracking pixels are never loaded, and images can be switched off entirely in Settings.
+typography. Reader mode uses no WebView; the only WebView in the app is the SIGN IN screen, which
+exists so a bot check or login can be cleared and reused. It turns feed-provided HTML into a focused reading view of text and, when images are enabled, the pictures the publisher placed in the article. Scripts, advertisements, and tracking pixels are never loaded, and images can be switched off entirely in Settings.
 
 ## Built for LightOS
 

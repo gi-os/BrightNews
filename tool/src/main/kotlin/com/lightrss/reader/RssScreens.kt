@@ -13,7 +13,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -707,8 +706,6 @@ class ReaderPageScreen(
         val colors by LightThemeController.colors.collectAsState()
         val state by viewModel.state.collectAsState()
         val imageStore = rememberImageStore(repository)
-        val openLink = rememberLinkOpener()
-        var linkNotice by remember { mutableStateOf<String?>(null) }
         val page = state.page
         val target = state.resolvedUrl.ifBlank { link }
 
@@ -725,7 +722,7 @@ class ReaderPageScreen(
                 when {
                     state.isLoading -> LoadingScreen("Fetching the page\u2026", Modifier.weight(1f))
 
-                    page != null -> LightScrollView(
+                    else -> LightScrollView(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
@@ -737,81 +734,57 @@ class ReaderPageScreen(
                                 bottom = 2f.gridUnitsAsDp(),
                             ),
                         ) {
-                            LightText(
-                                text = page.title.ifBlank { fallbackTitle },
-                                variant = LightTextVariant.Subheading,
-                                modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
-                            )
-                            val credit = listOf(page.byline, sourceHost(link))
-                                .filter { it.isNotBlank() }
-                                .joinToString(" \u00b7 ")
-                            if (credit.isNotBlank()) {
+                            if (page != null) {
                                 LightText(
-                                    text = credit,
+                                    text = page.title.ifBlank { fallbackTitle },
+                                    variant = LightTextVariant.Subheading,
+                                    modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
+                                )
+                                val credit = listOf(page.byline, sourceHost(link))
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" \u00b7 ")
+                                if (credit.isNotBlank()) {
+                                    LightText(
+                                        text = credit,
+                                        variant = LightTextVariant.Superfine,
+                                        lighten = true,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+                                    )
+                                }
+                                ContentBlocksBody(
+                                    blocks = page.blocks,
+                                    imageStore = imageStore,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                LightText(
+                                    text = state.error ?: "That page could not be opened.",
+                                    variant = LightTextVariant.Paragraph,
+                                    modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
+                                )
+                                LightText(
+                                    text = target,
                                     variant = LightTextVariant.Superfine,
                                     lighten = true,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+                                    modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
                                 )
                             }
-                            ContentBlocksBody(
-                                blocks = page.blocks,
-                                imageStore = imageStore,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    }
 
-                    else -> LightScrollView(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(
-                                horizontal = 1f.gridUnitsAsDp(),
-                                vertical = 1f.gridUnitsAsDp(),
-                            ),
-                        ) {
-                            LightText(
-                                text = state.error ?: "That page could not be opened.",
-                                variant = LightTextVariant.Paragraph,
-                            )
-                            LightText(
-                                text = target,
-                                variant = LightTextVariant.Superfine,
-                                lighten = true,
-                                modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
-                            )
-                        }
-                    }
-                }
-
-                val notice = linkNotice
-                if (notice != null) {
-                    StatusLine(notice)
-                }
-
-                LightBottomBar(
-                    items = listOfNotNull(
-                        LightBarButton.Text(
-                            text = "SIGN IN",
-                            onClick = {
-                                linkNotice = if (openLink(target)) {
-                                    null
-                                } else {
-                                    "No app on this phone opens web links."
+                            // Actions sit at the end of the article rather than in a fixed bar.
+                            SettingsRow(
+                                title = "SIGN IN",
+                                detail = "Open this page here and keep the sign-in",
+                            ) {
+                                navigateTo({ SignInScreen(it, target, repository) }) {
+                                    viewModel.retry()
                                 }
-                            },
-                        ),
-                        if (page == null) {
-                            LightBarButton.Text("RETRY", onClick = viewModel::retry)
-                        } else {
-                            null
-                        },
-                    ),
-                )
+                            }
+                            SettingsRow("RELOAD", "Fetch the page again") { viewModel.retry() }
+                        }
+                    }
+                }
             }
         }
     }
@@ -896,7 +869,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.7.0",
+                            text = "VERSION 1.8.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

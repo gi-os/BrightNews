@@ -8,6 +8,19 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.8.0 - 2026-07-27
+
+### Changed
+
+- SIGN IN no longer hands the link to Chrome. Signing in there was useless: the cookie that gets
+  past the wall lands in Chrome, and the reader keeps being turned away. The page now opens in the
+  app, the cookies it collects are kept per host, and the user agent that earned them is recorded
+  and reused, so the next reader fetch arrives looking like the same client. Coming back from that
+  screen re-fetches the article automatically.
+- SIGN IN and RELOAD sit at the end of the article now instead of in a fixed bottom bar.
+- The sign-in view is the one place in the app that runs a page's own scripts, and the only place
+  a WebView exists. Reader mode itself still renders extracted text.
+
 ## 1.7.0 - 2026-07-27
 
 ### Added
