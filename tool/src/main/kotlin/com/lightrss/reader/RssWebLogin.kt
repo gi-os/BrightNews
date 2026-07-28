@@ -65,12 +65,14 @@ class SignInScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val webView = remember { mutableStateOf<WebView?>(null) }
+        // Named to keep it out of reach of WebView.getUrl() inside the builder below.
+        val pageUrl = url
 
         fun keepCookies() {
             val view = webView.value
             val manager = CookieManager.getInstance()
             manager.flush()
-            viewModel.keep(manager.getCookie(url), view?.settings?.userAgentString)
+            viewModel.keep(manager.getCookie(pageUrl), view?.settings?.userAgentString)
         }
 
         DisposableEffect(Unit) {
@@ -95,7 +97,7 @@ class SignInScreen(
                             goBack(Unit)
                         },
                     ),
-                    center = LightTopBarCenter.Text(sourceHost(url).ifBlank { "Sign in" }),
+                    center = LightTopBarCenter.Text(sourceHost(pageUrl).ifBlank { "Sign in" }),
                 )
                 AndroidView(
                     modifier = Modifier
@@ -110,7 +112,7 @@ class SignInScreen(
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             webViewClient = WebViewClient()
-                            loadUrl(url)
+                            loadUrl(pageUrl)
                             webView.value = this
                         }
                     },
