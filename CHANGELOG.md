@@ -8,6 +8,23 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.3.0 - 2026-07-27
+
+### Changed
+
+- Camera permission now follows the LightPass pattern instead of the SDK scanner's built-in
+  handling: ask LightOS, request the permission when it says no, and re-check every time the
+  screen returns to the front — which covers coming back from the LightOS permission dialog,
+  since `LightActivity.onResume()` calls `onScreenShow()`. Granting the camera the first time
+  now works from inside the app, with no adb needed.
+- The permission check is retried four times, 600 ms apart, before its silence is believed. The
+  service binding can lose a race with the first frame, and a single failed check was being
+  treated as a permanent refusal.
+- A server that never answers no longer blocks the screen: the camera is started anyway, because
+  an unanswered check says nothing about whether the permission is actually held.
+- When LightOS does report the permission missing, the screen offers ASK AGAIN and TYPE INSTEAD
+  rather than dead-ending.
+
 ## 1.2.1 - 2026-07-27
 
 ### Fixed

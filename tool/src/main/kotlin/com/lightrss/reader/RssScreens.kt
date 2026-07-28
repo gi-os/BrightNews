@@ -4,7 +4,6 @@ import android.Manifest
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,9 +13,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -26,11 +22,8 @@ import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
 import com.thelightphone.sdk.buildDatabase
-import com.thelightphone.sdk.checkPermission
-import com.thelightphone.sdk.rememberPermissionRequestLauncher
-import com.thelightphone.sdk.shared.LightServiceMethod
-import com.thelightphone.sdk.shared.asKotlinResult
 import com.thelightphone.sdk.rememberKeyboardOptions
+import com.thelightphone.sdk.rememberPermissionRequestLauncher
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightFullscreenModal
@@ -244,11 +237,11 @@ class AddFeedChooserScreen(
 /**
  * Adds a subscription from a QR code containing a feed or website address.
  *
- * The SDK's client wrapper asks LightOS whether the camera is granted and gives up when that
- * call fails, which is what a sideloaded tool sees: the server refuses the request and the
- * screen dead-ends on "unable to request camera permission". This screen drives the UI-level
- * scanner directly so a server that will not answer becomes a warning rather than a wall — the
- * permission request is still attempted, and CameraX is allowed to try regardless.
+ * Permission handling follows the same shape as LightPass: ask LightOS, request the permission
+ * when it says no, and re-check every time the screen comes back to the front, which covers
+ * returning from the LightOS permission dialog. Two additions: the check is retried a few times
+ * before it is believed, because the service binding can lose a race with the first frame, and a
+ * server that never answers falls through to the camera instead of walling the screen off.
  */
 class ScanFeedScreen(
     sealedActivity: SealedLightActivity,
@@ -261,10 +254,20 @@ class ScanFeedScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val state by viewModel.state.collectAsState()
+        val camera by viewModel.camera.collectAsState()
         val permissionLauncher = rememberPermissionRequestLauncher(Manifest.permission.CAMERA)
-        var serverNotice by remember { mutableStateOf<String?>(null) }
 
-        // The scanner reports failures through state so nothing navigates from the camera callback.
+        LaunchedEffect(Unit) { viewModel.startCameraChecks() }
+
+        // Ask for the permission once LightOS tells us it is missing.
+        LaunchedEffect(camera) {
+            if (viewModel.shouldRequestPermission()) {
+                viewModel.markPermissionRequested()
+                permissionLauncher?.launch()
+            }
+        }
+
+        // Add failures report through state so nothing navigates from the camera callback.
         LaunchedEffect(state.error) {
             val message = state.error ?: return@LaunchedEffect
             viewModel.clearError()
@@ -272,82 +275,65 @@ class ScanFeedScreen(
         }
 
         LightTheme(colors = colors) {
-            if (state.isAdding) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(LightThemeTokens.colors.background),
-                ) {
-                    LightTopBar(
-                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                        center = LightTopBarCenter.Text("Scan feed"),
-                    )
-                    LoadingScreen("Finding feed…", Modifier.weight(1f))
-                }
-            } else {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    // A fresh key re-arms the scanner's one-shot latch after a rejected code.
-                    key(state.inputSession) {
-                        LightQrCodeScanner(
-                            title = "Scan feed",
-                            onScanned = { scanned ->
-                                viewModel.addScannedFeed(scanned) { feedId -> goBack(feedId) }
-                            },
-                            onBack = { goBack() },
-                            checkCameraPermission = {
-                                checkPermission(Manifest.permission.CAMERA).asKotlinResult.fold(
-                                    onSuccess = { response ->
-                                        val granted = response.permissionResult ==
-                                            LightServiceMethod.GetPermission.Result.Granted
-                                        // Let the LightOS dialog do its job when the server is
-                                        // answering; just explain the fallback if it says no.
-                                        serverNotice = if (granted) {
-                                            null
-                                        } else {
-                                            "LightOS reports ${response.permissionResult}."
-                                        }
-                                        Result.success(granted)
-                                    },
-                                    onFailure = { error ->
-                                        // LightOS would not answer. Open the camera anyway: if the
-                                        // permission really is missing the preview simply stays dark,
-                                        // and the notice below says how to grant it.
-                                        serverNotice = error.message?.takeIf { it.isNotBlank() }
-                                            ?: "LightOS did not answer the permission check."
-                                        Result.success(true)
-                                    },
-                                )
-                            },
-                            launchCameraPermissionRequest = { permissionLauncher?.launch() },
-                            modifier = Modifier.background(LightThemeTokens.colors.background),
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(LightThemeTokens.colors.background),
+            ) {
+                when {
+                    state.isAdding -> {
+                        LightTopBar(
+                            leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                            center = LightTopBarCenter.Text("Scan feed"),
+                        )
+                        LoadingScreen("Finding feed…", Modifier.weight(1f))
+                    }
+
+                    camera == CameraAccess.Checking -> {
+                        LightTopBar(
+                            leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                            center = LightTopBarCenter.Text("Scan feed"),
+                        )
+                        LoadingScreen("Waking the camera…", Modifier.weight(1f))
+                    }
+
+                    camera == CameraAccess.Denied -> {
+                        LightTopBar(
+                            leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                            center = LightTopBarCenter.Text("Camera"),
+                        )
+                        EmptyState(
+                            "Light RSS needs the camera to read a QR code.\n\n" +
+                                "Allow it when the phone asks, then come back.",
+                            Modifier.weight(1f),
+                        )
+                        LightBottomBar(
+                            items = listOf(
+                                LightBarButton.Text("TYPE INSTEAD", onClick = {
+                                    navigateTo({ AddFeedScreen(it, repository) }) { id -> goBack(id) }
+                                }),
+                                LightBarButton.Text("ASK AGAIN", onClick = {
+                                    viewModel.retryCameraPermission()
+                                }),
+                            ),
                         )
                     }
-                    val notice = serverNotice
-                    if (notice != null) {
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .background(LightThemeTokens.colors.background)
-                                .padding(
-                                    horizontal = 1f.gridUnitsAsDp(),
-                                    vertical = 0.5f.gridUnitsAsDp(),
-                                ),
-                        ) {
-                            LightText(
-                                text = "CAMERA CHECK: $notice",
-                                variant = LightTextVariant.Superfine,
-                                lighten = true,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            LightText(
-                                text = "If the preview stays dark, run: adb shell pm grant " +
-                                    "com.lightrss.reader android.permission.CAMERA",
-                                variant = LightTextVariant.Superfine,
-                                lighten = true,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
+
+                    else -> {
+                        // Granted, or LightOS never answered and the camera is worth a try.
+                        // A fresh key re-arms the scanner's one-shot latch after a rejected code.
+                        key(state.inputSession) {
+                            LightQrCodeScanner(
+                                title = "Scan feed",
+                                onScanned = { scanned ->
+                                    viewModel.addScannedFeed(scanned) { feedId -> goBack(feedId) }
+                                },
+                                onBack = { goBack() },
+                                checkCameraPermission = { Result.success(true) },
+                                launchCameraPermissionRequest = { permissionLauncher?.launch() },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(LightThemeTokens.colors.background),
                             )
                         }
                     }
@@ -787,7 +773,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.2.1",
+                            text = "VERSION 1.3.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
