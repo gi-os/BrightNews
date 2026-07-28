@@ -68,11 +68,40 @@ data class AddFeedUiState(
     val draft: String = "",
     val inputSession: Int = 0,
     val isAdding: Boolean = false,
+    /** Set from a scan or add failure; the screen shows it and then calls [AddFeedViewModel.clearError]. */
+    val error: String? = null,
 )
+
+/** No-state viewmodel for screens that only route, such as the add-feed chooser. */
+class ChooserViewModel : LightViewModel<Long>()
 
 class AddFeedViewModel(private val repository: RssRepository) : LightViewModel<Long>() {
     private val _state = MutableStateFlow(AddFeedUiState())
     val state = _state.asStateFlow()
+
+    /**
+     * Adds the feed encoded in a scanned QR code. Called from the camera analyzer, so it never
+     * navigates directly: failures land in [AddFeedUiState.error] for the screen to present.
+     */
+    fun addScannedFeed(scanned: String, onAdded: (Long) -> Unit) {
+        if (_state.value.isAdding) return
+        val url = try {
+            RssParser.feedUrlFromScan(scanned)
+        } catch (error: IllegalArgumentException) {
+            reportError(error.message ?: "That QR code was not a feed address.")
+            return
+        }
+        addFeed(url, onAdded) { message -> reportError(message) }
+    }
+
+    fun reportError(message: String) {
+        _state.update { it.copy(isAdding = false, error = message, inputSession = it.inputSession + 1) }
+    }
+
+    /** Clears a shown error and re-arms the scanner or editor for another attempt. */
+    fun clearError() {
+        _state.update { it.copy(error = null) }
+    }
 
     fun addFeed(
         rawUrl: CharSequence,
@@ -237,6 +266,17 @@ class ReaderViewModel(
 }
 
 class SettingsViewModel(private val repository: RssRepository) : LightViewModel<Unit>() {
+    val imagesEnabled: StateFlow<Boolean> = repository.imagesEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setImagesEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) { repository.setImagesEnabled(enabled) }
+    }
+
+    fun clearImages() {
+        viewModelScope.launch(Dispatchers.IO) { repository.clearImageCache() }
+    }
+
     fun markAllRead() {
         viewModelScope.launch(Dispatchers.IO) {
             repository.markAllRead()

@@ -2,7 +2,9 @@
 
 **A quiet, full-featured RSS and Atom reader for the Light Phone III.**
 
-Light RSS is an unofficial community tool built inside the official [Light SDK](https://github.com/lightphone/light-sdk). It keeps feeds, reading state, saved articles, and search on the phone while following LightOS navigation and visual conventions.
+Light RSS is an unofficial community tool built inside the official [Light SDK](https://github.com/lightphone/light-sdk). It keeps feeds, reading state, saved articles, images, and search on the phone while following LightOS navigation and visual conventions.
+
+This fork adds two things to [zachattack323/LightRSS](https://github.com/zachattack323/LightRSS): **feed images** in the list and reader, and **adding subscriptions by scanning a QR code** instead of typing a URL.
 
 <table>
   <tr>
@@ -40,8 +42,13 @@ Screenshots are from the 1080 × 1240 LightOS emulator and show public feed cont
 - Keeps feed-provided text available offline after it has been downloaded.
 - Uses defensive XML parsing with DTD processing and external entities disabled.
 - Includes light/dark appearance switching and local cleanup controls.
+- Shows feed images: a thumbnail per article row and full-width images in the reader, downsampled and rendered greyscale for the Light Phone display.
+- Pulls images from `enclosure`, `media:content`, `media:thumbnail`, `itunes:image`, and inline `<img>` markup, dropping 1 × 1 beacons, `data:` URIs, and known tracking hosts.
+- Downloads images lazily, only for rows and articles on screen, into an 8 MB memory cache and a 24 MB disk cache.
+- Adds subscriptions by scanning a QR code with the SDK scanner, accepting bare URLs, `feed://` and `rss://` schemes, and codes that wrap an address in text.
+- Keeps a Settings switch for images: turn them off for a text-only reader, or clear the cache and keep them on.
 
-Light RSS does not use a WebView or open article pages. It turns feed-provided HTML into a focused text view without loading embedded images, scripts, or tracking pixels.
+Light RSS does not use a WebView or open article pages. It turns feed-provided HTML into a focused reading view of text and, when images are enabled, the pictures the publisher placed in the article. Scripts, advertisements, and tracking pixels are never loaded, and images can be switched off entirely in Settings.
 
 ## Built for LightOS
 
@@ -51,15 +58,16 @@ The UI is deliberately compact and uses the SDK rather than imitating it:
 - `LightTopBar`, `LightBottomBar`, `LightBarButton`, and `LightIcons` for navigation and actions.
 - `LightLazyScrollView` and `LightScrollView` with LightOS scrollbars.
 - `LightTextInputEditor` and the Light Phone keyboard for feed entry and search.
+- `LightQrCodeScanner` from the SDK for the scan-to-subscribe screen, including its camera permission flow.
 - The 27 × 31 Light grid through `gridUnitsAsDp`.
 - One SDK screen per editor, confirmation, message, and content view.
 - Identical one-layer behavior for the visible back button and the phone's system back action.
 
 ## Privacy
 
-Light RSS does not add an account, advertising, its own analytics integration, or a Light RSS-operated server. The app contacts the feed or website addresses you subscribe to, so those hosts receive an ordinary HTTP request, your IP address, and the `LightRSS/1.0 (Light Phone III)` user agent. On first launch it adds and refreshes the three starter feeds listed above.
+Light RSS does not add an account, advertising, its own analytics integration, or a Light RSS-operated server. The app contacts the feed or website addresses you subscribe to, so those hosts receive an ordinary HTTP request, your IP address, and the `LightRSS/1.1 (Light Phone III)` user agent. On first launch it adds and refreshes the three starter feeds listed above.
 
-All subscriptions and downloaded article text are stored locally. Unfollowing a feed removes its local articles; Settings can remove read, unsaved articles; uninstalling the app removes its database. See [PRIVACY.md](PRIVACY.md) for the complete disclosure.
+With images enabled, the app also requests images from whichever host serves them, but only for articles that are on screen. All subscriptions, article text, and downloaded images are stored locally. Unfollowing a feed removes its local articles; Settings can remove read, unsaved articles; uninstalling the app removes its database. See [PRIVACY.md](PRIVACY.md) for the complete disclosure.
 
 ## Build
 
@@ -115,7 +123,7 @@ Restore `serverPackage = "com.lightos"` before a device or release build.
 
 - The publishable source defaults to the real LightOS server package, `com.lightos`.
 - `com.lightrss.reader` is the tool ID. Treat it as permanent and confirm ownership before the first official submission.
-- Light RSS requests only `android.permission.INTERNET` in `lighttool.toml`. The merged APK also inherits Android permissions and components from the current Light SDK dependency graph; the exact set and how it is used are documented in [PRIVACY.md](PRIVACY.md#permissions).
+- Light RSS requests `android.permission.INTERNET` and `android.permission.CAMERA` in `lighttool.toml`. The camera is used only by the scan-to-subscribe screen. The merged APK also inherits Android permissions and components from the current Light SDK dependency graph; the exact set and how it is used are documented in [PRIVACY.md](PRIVACY.md#permissions).
 - Local debug and release APKs use the SDK's public development keystore. They are not production-signed artifacts.
 - The bundled Light builder produces an unsigned APK with local signing removed; official distribution/signing follows the process provided by Light.
 - Community-tool distribution is evolving. Check the current upstream SDK guidance before submitting a release.

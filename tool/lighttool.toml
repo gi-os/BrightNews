@@ -1,9 +1,12 @@
 [tool]
 id = "com.lightrss.reader"
 label = "RSS"
-versionCode = 1
-versionName = "1.0.0"
-permissions = ["android.permission.INTERNET"]
+versionCode = 2
+versionName = "1.1.0"
+permissions = [
+    "android.permission.INTERNET",
+    "android.permission.CAMERA",
+]
 # Real Light Phone III builds communicate with LightOS. Use
 # "com.thelightphone.sdk.emulator" temporarily for local emulator runs.
 serverPackage = "com.lightos"

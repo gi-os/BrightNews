@@ -3,6 +3,7 @@ package com.lightrss.reader
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
@@ -11,11 +12,14 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
 import java.net.URI
 
 sealed interface FeedLoadResult {
@@ -81,11 +85,26 @@ class RssApi {
         )
     }
 
+    /** Fetches raw image bytes for the reader. Returns null for anything that is not an image. */
+    suspend fun loadImageBytes(url: String): ByteArray? {
+        val response = client.get(url) {
+            header(HttpHeaders.UserAgent, USER_AGENT)
+            header(HttpHeaders.Accept, "image/*")
+        }
+        if (!response.status.isSuccess()) return null
+        val contentType = response.headers[HttpHeaders.ContentType].orEmpty()
+        if (contentType.isNotBlank() && !contentType.startsWith("image/", ignoreCase = true)) return null
+        val declaredLength = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        if (declaredLength != null && declaredLength > MAX_IMAGE_BYTES) return null
+        val bytes = response.body<ByteArray>()
+        return bytes.takeIf { it.size <= MAX_IMAGE_BYTES }
+    }
+
     fun close() = client.close()
 
     private suspend fun request(url: String, etag: String?, lastModified: String?): HttpResponse =
         client.get(url) {
-            header(HttpHeaders.UserAgent, "LightRSS/1.0 (Light Phone III)")
+            header(HttpHeaders.UserAgent, USER_AGENT)
             header(HttpHeaders.Accept, "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.8")
             if (!etag.isNullOrBlank()) header(HttpHeaders.IfNoneMatch, etag)
             if (!lastModified.isNullOrBlank()) header(HttpHeaders.IfModifiedSince, lastModified)
@@ -98,6 +117,11 @@ class RssApi {
     }
 
     companion object {
+        const val USER_AGENT = "LightRSS/1.1 (Light Phone III)"
+
+        /** Images larger than this are skipped rather than buffered into memory. */
+        const val MAX_IMAGE_BYTES = 8L * 1024 * 1024
+
         fun normalizeUrl(raw: String): String {
             val candidate = raw.trim().let { value ->
                 if ("://" in value) value else "https://$value"
@@ -119,7 +143,13 @@ class RssApi {
 class RssRepository(
     private val dao: RssDao,
     private val api: RssApi = RssApi(),
+    imageCacheDir: File? = null,
 ) {
+    /** Null when the caller did not provide a cache directory, e.g. in tests. */
+    val images: ArticleImageStore? = imageCacheDir?.let { root ->
+        ArticleImageStore(File(root, "images"), api::loadImageBytes)
+    }
+
     private val syncMutex = Mutex()
     private val _syncState = MutableStateFlow(SyncState())
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
@@ -133,6 +163,18 @@ class RssRepository(
     fun observeFeedArticles(feedId: Long): Flow<List<ArticleRow>> = dao.observeFeedArticles(feedId)
     fun observeArticle(articleId: String): Flow<ArticleRow?> = dao.observeArticle(articleId)
     fun search(query: String): Flow<List<ArticleRow>> = dao.observeSearch(query.trim())
+
+    /** Whether feed images should be downloaded and shown. Defaults to on. */
+    val imagesEnabled: Flow<Boolean> = dao.observeMetadata(SHOW_IMAGES_KEY)
+        .map { it != "0" }
+        .distinctUntilChanged()
+
+    suspend fun setImagesEnabled(enabled: Boolean) {
+        dao.putMetadata(AppMetadataEntity(SHOW_IMAGES_KEY, if (enabled) "1" else "0"))
+        if (!enabled) images?.clear()
+    }
+
+    fun clearImageCache() = images?.clear()
 
     suspend fun initialize() {
         if (dao.getMetadata(STARTER_FEEDS_KEY) != null) return
@@ -246,11 +288,21 @@ class RssRepository(
                 publishedAt = item.publishedAt,
                 summary = item.summary.take(MAX_SUMMARY_LENGTH),
                 content = item.content.take(MAX_CONTENT_LENGTH),
+                imageUrl = item.imageUrl.take(MAX_URL_LENGTH),
+                contentBlocks = ContentBlocks.encode(item.blocks).let { encoded ->
+                    // Cut on a record boundary: a half-written line would decode into junk.
+                    if (encoded.length <= MAX_CONTENT_LENGTH) {
+                        encoded
+                    } else {
+                        encoded.take(MAX_CONTENT_LENGTH).substringBeforeLast('\n', "")
+                    }
+                },
             )
         }
 
     companion object {
         private const val STARTER_FEEDS_KEY = "starter_feeds_added"
+        private const val SHOW_IMAGES_KEY = "show_images"
         private const val AUTO_REFRESH_AGE_MS = 15 * 60 * 1_000L
         private const val MAX_TITLE_LENGTH = 600
         private const val MAX_AUTHOR_LENGTH = 300

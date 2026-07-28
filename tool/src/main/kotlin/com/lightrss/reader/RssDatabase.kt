@@ -12,6 +12,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(
@@ -53,6 +55,10 @@ data class ArticleEntity(
     val publishedAt: Long,
     val summary: String = "",
     val content: String = "",
+    /** Lead image for the article, or "" when the feed offered none. */
+    val imageUrl: String = "",
+    /** Body blocks encoded by [ContentBlocks]; empty when the article has no inline images. */
+    val contentBlocks: String = "",
     val isRead: Boolean = false,
     val isStarred: Boolean = false,
     val isArchived: Boolean = false,
@@ -190,6 +196,9 @@ interface RssDao {
     @Query("SELECT value FROM app_metadata WHERE `key` = :key LIMIT 1")
     suspend fun getMetadata(key: String): String?
 
+    @Query("SELECT value FROM app_metadata WHERE `key` = :key LIMIT 1")
+    fun observeMetadata(key: String): Flow<String?>
+
     @Query(
         """
         UPDATE feeds SET
@@ -231,7 +240,9 @@ interface RssDao {
             author = :author,
             publishedAt = :publishedAt,
             summary = :summary,
-            content = :content
+            content = :content,
+            imageUrl = :imageUrl,
+            contentBlocks = :contentBlocks
         WHERE id = :id
         """,
     )
@@ -243,6 +254,8 @@ interface RssDao {
         publishedAt: Long,
         summary: String,
         content: String,
+        imageUrl: String,
+        contentBlocks: String,
     )
 
     @Query("UPDATE articles SET isRead = :isRead WHERE id = :articleId")
@@ -278,6 +291,8 @@ interface RssDao {
                 publishedAt = article.publishedAt,
                 summary = article.summary,
                 content = article.content,
+                imageUrl = article.imageUrl,
+                contentBlocks = article.contentBlocks,
             )
         }
     }
@@ -285,9 +300,19 @@ interface RssDao {
 
 @Database(
     entities = [FeedEntity::class, ArticleEntity::class, AppMetadataEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class RssDatabase : RoomDatabase() {
     abstract fun rssDao(): RssDao
+
+    companion object {
+        /** Adds article image columns. Existing rows keep their text and pick images up on refresh. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE articles ADD COLUMN imageUrl TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE articles ADD COLUMN contentBlocks TEXT NOT NULL DEFAULT ''")
+            }
+        }
+    }
 }

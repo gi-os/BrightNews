@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import com.thelightphone.sdk.InitialScreen
+import com.thelightphone.sdk.LightQrCodeScanner
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SimpleLightScreen
@@ -44,8 +46,16 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
     override val viewModelClass: Class<HomeViewModel> = HomeViewModel::class.java
 
     override fun createViewModel(): HomeViewModel {
-        val database = lightContext.buildDatabase(RssDatabase::class.java, "light-rss.db")
-        return HomeViewModel(RssRepository(database.rssDao()), database)
+        val database = lightContext.buildDatabase(
+            RssDatabase::class.java,
+            "light-rss.db",
+            RssDatabase.MIGRATION_1_2,
+        )
+        val repository = RssRepository(
+            dao = database.rssDao(),
+            imageCacheDir = lightContext.filesDir,
+        )
+        return HomeViewModel(repository, database)
     }
 
     @Composable
@@ -55,6 +65,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         val unreadOnly by viewModel.unreadOnly.collectAsState()
         val sync by viewModel.syncState.collectAsState()
         val repository = viewModel.repository
+        val imageStore = rememberImageStore(repository)
 
         LightTheme(colors = colors) {
             Column(
@@ -92,6 +103,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     },
                     onOpen = { row -> navigateTo({ ReaderScreen(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
+                    imageStore = imageStore,
                 )
                 LightBottomBar(
                     items = listOf(
@@ -113,6 +125,13 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             }
         }
     }
+}
+
+/** The image store to render with, or null while images are switched off in Settings. */
+@Composable
+private fun rememberImageStore(repository: RssRepository): ArticleImageStore? {
+    val enabled by repository.imagesEnabled.collectAsState(initial = true)
+    return repository.images.takeIf { enabled }
 }
 
 class FeedsScreen(
@@ -139,7 +158,7 @@ class FeedsScreen(
                     rightButton = LightBarButton.LightIcon(
                         LightIcons.ADD,
                         onClick = {
-                            navigateTo({ AddFeedScreen(it, repository) }) { feedId ->
+                            navigateTo({ AddFeedChooserScreen(it, repository) }) { feedId ->
                                 navigateTo({ FeedScreen(it, feedId, repository) })
                             }
                         },
@@ -163,6 +182,88 @@ class FeedsScreen(
     }
 }
 
+/** Chooser shown by the + button: scan a QR code, or type an address on the Light keyboard. */
+class AddFeedChooserScreen(
+    sealedActivity: SealedLightActivity,
+    private val repository: RssRepository,
+) : LightScreen<Long, ChooserViewModel>(sealedActivity) {
+    override val viewModelClass: Class<ChooserViewModel> = ChooserViewModel::class.java
+    override fun createViewModel() = ChooserViewModel()
+
+    @Composable
+    override fun Content() {
+        val colors by LightThemeController.colors.collectAsState()
+        LightTheme(colors = colors) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(LightThemeTokens.colors.background),
+            ) {
+                LightTopBar(
+                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                    center = LightTopBarCenter.Text("Add feed"),
+                )
+                SettingsRow("SCAN QR CODE", "Point the camera at a feed code") {
+                    navigateTo({ ScanFeedScreen(it, repository) }) { feedId -> goBack(feedId) }
+                }
+                SettingsRow("TYPE ADDRESS", "Enter a website or feed URL") {
+                    navigateTo({ AddFeedScreen(it, repository) }) { feedId -> goBack(feedId) }
+                }
+            }
+        }
+    }
+}
+
+/** Adds a subscription from a QR code containing a feed or website address. */
+class ScanFeedScreen(
+    sealedActivity: SealedLightActivity,
+    private val repository: RssRepository,
+) : LightScreen<Long, AddFeedViewModel>(sealedActivity) {
+    override val viewModelClass: Class<AddFeedViewModel> = AddFeedViewModel::class.java
+    override fun createViewModel() = AddFeedViewModel(repository)
+
+    @Composable
+    override fun Content() {
+        val colors by LightThemeController.colors.collectAsState()
+        val state by viewModel.state.collectAsState()
+
+        // The scanner reports failures through state so nothing navigates from the camera callback.
+        LaunchedEffect(state.error) {
+            val message = state.error ?: return@LaunchedEffect
+            viewModel.clearError()
+            navigateTo({ MessageScreen(it, message) })
+        }
+
+        LightTheme(colors = colors) {
+            if (state.isAdding) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(LightThemeTokens.colors.background),
+                ) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text("Scan feed"),
+                    )
+                    LoadingScreen("Finding feed…", Modifier.weight(1f))
+                }
+            } else {
+                // A fresh key re-arms the scanner's one-shot latch after a rejected code.
+                key(state.inputSession) {
+                    LightQrCodeScanner(
+                        title = "Scan feed",
+                        onScanned = { scanned ->
+                            viewModel.addScannedFeed(scanned) { feedId -> goBack(feedId) }
+                        },
+                        onBack = { goBack() },
+                        modifier = Modifier.background(LightThemeTokens.colors.background),
+                    )
+                }
+            }
+        }
+    }
+}
+
 class AddFeedScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
@@ -176,6 +277,12 @@ class AddFeedScreen(
         val state by viewModel.state.collectAsState()
         val input = key(state.inputSession) { rememberTextFieldState(state.draft) }
         val keyboard = rememberKeyboardOptions()
+
+        LaunchedEffect(state.error) {
+            val message = state.error ?: return@LaunchedEffect
+            viewModel.clearError()
+            navigateTo({ MessageScreen(it, message) })
+        }
 
         LightTheme(colors = colors) {
             if (state.isAdding) {
@@ -200,7 +307,7 @@ class AddFeedScreen(
                         viewModel.addFeed(
                             rawUrl = raw,
                             onAdded = { feedId -> goBack(feedId) },
-                            onError = { message -> navigateTo({ MessageScreen(it, message) }) },
+                            onError = viewModel::reportError,
                         )
                     },
                     onBack = { goBack() },
@@ -227,6 +334,7 @@ class FeedScreen(
         val feed by viewModel.feed.collectAsState()
         val articles by viewModel.articles.collectAsState()
         val state by viewModel.state.collectAsState()
+        val imageStore = rememberImageStore(repository)
 
         LightTheme(colors = colors) {
             Column(
@@ -253,6 +361,7 @@ class FeedScreen(
                     emptyMessage = "No articles are available from this feed.",
                     onOpen = { row -> navigateTo({ ReaderScreen(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
+                    imageStore = imageStore,
                 )
                 LightBottomBar(
                     items = listOf(
@@ -327,6 +436,7 @@ class SavedScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val articles by viewModel.articles.collectAsState()
+        val imageStore = rememberImageStore(repository)
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -342,6 +452,7 @@ class SavedScreen(
                     emptyMessage = "No saved articles.\n\nUse the star while reading to keep something.",
                     onOpen = { row -> navigateTo({ ReaderScreen(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
+                    imageStore = imageStore,
                 )
             }
         }
@@ -360,6 +471,7 @@ class SearchScreen(
         val colors by LightThemeController.colors.collectAsState()
         val state by viewModel.state.collectAsState()
         val results by viewModel.results.collectAsState()
+        val imageStore = rememberImageStore(repository)
         val input = rememberTextFieldState(state.query)
         val keyboard = rememberKeyboardOptions()
 
@@ -392,6 +504,7 @@ class SearchScreen(
                         emptyMessage = "No matching articles.",
                         onOpen = { row -> navigateTo({ ReaderScreen(it, row.article.id, repository) }) },
                         modifier = Modifier.weight(1f),
+                        imageStore = imageStore,
                     )
                 }
             }
@@ -412,6 +525,7 @@ class ReaderScreen(
         val colors by LightThemeController.colors.collectAsState()
         val row by viewModel.article.collectAsState()
         val article = row?.article
+        val imageStore = rememberImageStore(repository)
 
         LightTheme(colors = colors) {
             Column(
@@ -465,26 +579,11 @@ class ReaderScreen(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
                             )
-                            if (article.content.isNotBlank()) {
-                                LightText(
-                                    text = article.content,
-                                    variant = LightTextVariant.Paragraph,
-                                    modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
-                                )
-                            } else if (article.summary.isNotBlank()) {
-                                LightText(
-                                    text = article.summary,
-                                    variant = LightTextVariant.Paragraph,
-                                    modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
-                                )
-                            } else {
-                                LightText(
-                                    text = "This feed did not include article text.",
-                                    variant = LightTextVariant.Paragraph,
-                                    lighten = true,
-                                    modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
-                                )
-                            }
+                            ArticleBody(
+                                article = article,
+                                imageStore = imageStore,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                             val source = sourceHost(article.link)
                             if (source.isNotBlank()) {
                                 LightText(
@@ -526,6 +625,7 @@ class SettingsScreen(
     @Composable
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
+        val imagesEnabled by viewModel.imagesEnabled.collectAsState()
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -539,6 +639,19 @@ class SettingsScreen(
                 LightScrollView(modifier = Modifier.weight(1f)) {
                     SettingsRow("APPEARANCE", "Toggle light / dark") {
                         LightThemeController.toggle()
+                    }
+                    SettingsRow(
+                        title = if (imagesEnabled) "IMAGES ON" else "IMAGES OFF",
+                        detail = if (imagesEnabled) {
+                            "Feed images load as you read"
+                        } else {
+                            "Text only, no image downloads"
+                        },
+                    ) {
+                        viewModel.setImagesEnabled(!imagesEnabled)
+                    }
+                    SettingsRow("CLEAR IMAGE CACHE", "Remove downloaded images, keep article text") {
+                        viewModel.clearImages()
                     }
                     SettingsRow("MARK ALL READ", "Keep saved articles and history") {
                         navigateTo({
@@ -565,12 +678,12 @@ class SettingsScreen(
                     Column(modifier = Modifier.padding(1f.gridUnitsAsDp())) {
                         LightText("ABOUT", LightTextVariant.Superfine, lighten = true)
                         LightText(
-                            text = "Offline RSS and Atom reading. No app ads. No WebView.",
+                            text = "Offline RSS and Atom reading with feed images. No app ads. No WebView.",
                             variant = LightTextVariant.Detail,
                             modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.0.0",
+                            text = "VERSION 1.1.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

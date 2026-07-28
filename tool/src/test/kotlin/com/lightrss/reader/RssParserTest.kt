@@ -101,4 +101,106 @@ class RssParserTest {
         assertEquals("Enter a complete website or feed address.", error.message)
         assertEquals("https://example.com/feed", RssApi.normalizeUrl("example.com/feed"))
     }
+
+    @Test
+    fun extractsEnclosureImageAndInlineBlocks() {
+        val parsed = RssParser.parse(
+            xml = """
+                <?xml version="1.0"?>
+                <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+                  <channel>
+                    <title>Pictures</title>
+                    <link>https://example.com/</link>
+                    <item>
+                      <guid>with-images</guid>
+                      <title>Has pictures</title>
+                      <link>/posts/one</link>
+                      <enclosure url="https://cdn.example.com/hero.jpg" type="image/jpeg" length="2048"/>
+                      <content:encoded><![CDATA[<p>Intro.</p><img src="/img/a.png" width="800" height="400"/><p>After.</p>]]></content:encoded>
+                    </item>
+                  </channel>
+                </rss>
+            """.trimIndent(),
+            sourceUrl = "https://example.com/feed.xml",
+        )
+
+        val item = parsed.items.single()
+        assertEquals("https://cdn.example.com/hero.jpg", item.imageUrl)
+        assertEquals(
+            listOf(
+                ContentBlock.Text("Intro."),
+                ContentBlock.Image("https://example.com/img/a.png"),
+                ContentBlock.Text("After."),
+            ),
+            item.blocks,
+        )
+        assertEquals("Intro.\n\nAfter.", item.content)
+    }
+
+    @Test
+    fun usesMediaThumbnailAndResolvesProtocolRelativeUrls() {
+        val parsed = RssParser.parse(
+            xml = """
+                <?xml version="1.0"?>
+                <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+                  <channel>
+                    <title>Media</title>
+                    <link>https://example.com/</link>
+                    <item>
+                      <guid>thumb</guid>
+                      <title>Thumbnail only</title>
+                      <link>https://example.com/two</link>
+                      <media:thumbnail url="//cdn.example.com/thumb.jpg"/>
+                      <description><![CDATA[<p>Text only.</p>]]></description>
+                    </item>
+                  </channel>
+                </rss>
+            """.trimIndent(),
+            sourceUrl = "https://example.com/feed.xml",
+        )
+
+        val item = parsed.items.single()
+        assertEquals("https://cdn.example.com/thumb.jpg", item.imageUrl)
+        assertTrue(item.blocks.isEmpty(), "text-only articles should not carry blocks")
+    }
+
+    @Test
+    fun skipsTrackingPixelsAndDataUris() {
+        val html = """
+            <p>Story.</p>
+            <img src="https://feeds.feedburner.com/~ff/pixel.gif" width="1" height="1"/>
+            <img src="data:image/png;base64,iVBORw0KGgo="/>
+            <img src="https://cdn.example.com/real.jpg"/>
+        """.trimIndent()
+
+        assertEquals(
+            listOf("https://cdn.example.com/real.jpg"),
+            RssParser.imagesInHtml(html),
+        )
+    }
+
+    @Test
+    fun contentBlocksSurviveEncodingRoundTrip() {
+        val blocks = listOf(
+            ContentBlock.Text("Line one\nLine two\twith a tab and a \\ backslash"),
+            ContentBlock.Image("https://cdn.example.com/a.jpg"),
+            ContentBlock.Text("Closing paragraph."),
+        )
+
+        assertEquals(blocks, ContentBlocks.decode(ContentBlocks.encode(blocks)))
+        assertTrue(ContentBlocks.decode("").isEmpty())
+    }
+
+    @Test
+    fun readsFeedAddressesOutOfScannedQrPayloads() {
+        assertEquals("https://example.com/feed.xml", RssParser.feedUrlFromScan(" https://example.com/feed.xml "))
+        assertEquals("https://example.com/rss", RssParser.feedUrlFromScan("feed://example.com/rss"))
+        assertEquals("example.com/rss", RssParser.feedUrlFromScan("example.com/rss"))
+        assertEquals(
+            "https://blog.example.com/atom.xml",
+            RssParser.feedUrlFromScan("Subscribe: https://blog.example.com/atom.xml thanks!"),
+        )
+        assertFailsWith<IllegalArgumentException> { RssParser.feedUrlFromScan("   ") }
+        assertFailsWith<IllegalArgumentException> { RssParser.feedUrlFromScan("WIFI:S=cafe;T=WPA;P=hunter2;; and more") }
+    }
 }
