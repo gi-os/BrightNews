@@ -85,7 +85,8 @@ jobs:
           out="LightRSS-${VERSION_NAME}.apk"
           cp "$src" "$out"
           echo "APK_NAME=$out" >> "$GITHUB_ENV"
-          "${ANDROID_HOME}"/build-tools/*/apksigner verify --print-certs "$out" | tee signing-certs.txt
+          apksigner="$(ls -d "${ANDROID_HOME}"/build-tools/*/apksigner | sort -V | tail -n 1)"
+          "$apksigner" verify --print-certs "$out" | tee signing-certs.txt
           sha256sum "$out" | tee "${out}.sha256"
 
       - name: Delete keystore
