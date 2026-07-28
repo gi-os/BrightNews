@@ -69,6 +69,14 @@ Light RSS does not add an account, advertising, its own analytics integration, o
 
 With images enabled, the app also requests images from whichever host serves them, but only for articles that are on screen. All subscriptions, article text, and downloaded images are stored locally. Unfollowing a feed removes its local articles; Settings can remove read, unsaved articles; uninstalling the app removes its database. See [PRIVACY.md](PRIVACY.md) for the complete disclosure.
 
+## Install
+
+Prebuilt, signed APKs are attached to every [release](https://github.com/gi-os/LightRSS/releases).
+Install once with `adb install -r LightRSS-<version>.apk`, or add
+`https://github.com/gi-os/LightRSS` to [Obtainium](https://github.com/ImranR98/Obtainium) to get
+updates automatically. Full instructions, including the signing fingerprint to verify, are in
+[INSTALL.md](INSTALL.md).
+
 ## Build
 
 ### Requirements

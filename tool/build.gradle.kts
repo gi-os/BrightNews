@@ -19,7 +19,27 @@ android {
             enableV3Signing = true
             enableV4Signing = true
         }
+
+        // Sideload signing key, supplied by CI through the environment. Never committed.
+        // Android only accepts an update signed by the same key that installed the app, so this
+        // keystore must stay the same for the life of the install.
+        create("sideload") {
+            val keystore = System.getenv("LIGHTRSS_KEYSTORE_FILE")
+            if (!keystore.isNullOrBlank()) {
+                storeFile = file(keystore)
+                storePassword = System.getenv("LIGHTRSS_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("LIGHTRSS_KEY_ALIAS") ?: "lightrss"
+                keyPassword = System.getenv("LIGHTRSS_KEY_PASSWORD")
+                    ?: System.getenv("LIGHTRSS_KEYSTORE_PASSWORD")
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
     }
+
+    // Release builds use the sideload key when CI provides one, and the SDK development key
+    // otherwise, so a local ./gradlew :tool:assembleRelease still works with no setup.
+    val hasSideloadKey = !System.getenv("LIGHTRSS_KEYSTORE_FILE").isNullOrBlank()
 
     defaultConfig {
         minSdk = rootProject.ext["minSdk"] as Int
@@ -36,7 +56,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("lightsdkDev")
+            signingConfig = signingConfigs.getByName(if (hasSideloadKey) "sideload" else "lightsdkDev")
         }
     }
 
