@@ -660,7 +660,17 @@ class ReaderScreen(
                         }
                     }
                     LightBottomBar(
-                        items = listOf(
+                        items = listOfNotNull(
+                            article.link.takeIf { it.isNotBlank() }?.let { link ->
+                                LightBarButton.Text(
+                                    text = "OPEN",
+                                    onClick = {
+                                        navigateTo({
+                                            ReaderPageScreen(it, article.id, link, article.title, repository)
+                                        })
+                                    },
+                                )
+                            },
                             LightBarButton.Text(
                                 text = if (article.isRead) "UNREAD" else "READ",
                                 onClick = viewModel::toggleRead,
@@ -671,6 +681,93 @@ class ReaderScreen(
                             ),
                         ),
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Reader-mode view of the page an article links to: the body copy and its images, pulled out of
+ * the page and rendered with Light typography. No browser, no scripts, no page furniture.
+ */
+class ReaderPageScreen(
+    sealedActivity: SealedLightActivity,
+    private val articleId: String,
+    private val link: String,
+    private val fallbackTitle: String,
+    private val repository: RssRepository,
+) : LightScreen<Unit, ReaderPageViewModel>(sealedActivity) {
+    override val viewModelClass: Class<ReaderPageViewModel> = ReaderPageViewModel::class.java
+    override fun createViewModel() = ReaderPageViewModel(articleId, link, repository)
+
+    @Composable
+    override fun Content() {
+        val colors by LightThemeController.colors.collectAsState()
+        val state by viewModel.state.collectAsState()
+        val imageStore = rememberImageStore(repository)
+        val page = state.page
+
+        LightTheme(colors = colors) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(LightThemeTokens.colors.background),
+            ) {
+                LightTopBar(
+                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                    center = LightTopBarCenter.Text(sourceHost(link).ifBlank { "Article" }),
+                )
+                when {
+                    state.isLoading -> LoadingScreen("Fetching the page\u2026", Modifier.weight(1f))
+
+                    page != null -> LightScrollView(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(
+                                start = 1f.gridUnitsAsDp(),
+                                end = 1f.gridUnitsAsDp(),
+                                bottom = 2f.gridUnitsAsDp(),
+                            ),
+                        ) {
+                            LightText(
+                                text = page.title.ifBlank { fallbackTitle },
+                                variant = LightTextVariant.Subheading,
+                                modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
+                            )
+                            val credit = listOf(page.byline, sourceHost(link))
+                                .filter { it.isNotBlank() }
+                                .joinToString(" \u00b7 ")
+                            if (credit.isNotBlank()) {
+                                LightText(
+                                    text = credit,
+                                    variant = LightTextVariant.Superfine,
+                                    lighten = true,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+                                )
+                            }
+                            ContentBlocksBody(
+                                blocks = page.blocks,
+                                imageStore = imageStore,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+
+                    else -> {
+                        EmptyState(
+                            state.error ?: "That page could not be opened.",
+                            Modifier.weight(1f),
+                        )
+                        LightBottomBar(
+                            items = listOf(LightBarButton.Text("RETRY", onClick = viewModel::retry)),
+                        )
+                    }
                 }
             }
         }
@@ -756,7 +853,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.5.0",
+                            text = "VERSION 1.6.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

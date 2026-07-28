@@ -40,6 +40,7 @@ Screenshots are from the 1080 × 1240 LightOS emulator and show public feed cont
 - Stores subscriptions, articles, unread state, saved items, and archive state in a local Room database.
 - Supports unread/all views, per-feed timelines, local search, saved articles, mark-all-read, archive, and unfollow.
 - Keeps feed-provided text available offline after it has been downloaded.
+- Opens the linked page in a built-in reader view: body copy and images only, extracted without a browser.
 - Uses defensive XML parsing with DTD processing and external entities disabled.
 - Includes light/dark appearance switching and local cleanup controls.
 - Shows feed images: a thumbnail per article row and full-width images in the reader, downsampled and rendered greyscale for the Light Phone display.
@@ -50,7 +51,8 @@ Screenshots are from the 1080 × 1240 LightOS emulator and show public feed cont
 - Takes feed addresses by paste, by the phone's own keyboard, or by the Light keyboard, whichever is least painful.
 - Keeps a Settings switch for images: turn them off for a text-only reader, or clear the cache and keep them on.
 
-Light RSS does not use a WebView or open article pages. It turns feed-provided HTML into a focused reading view of text and, when images are enabled, the pictures the publisher placed in the article. Scripts, advertisements, and tracking pixels are never loaded, and images can be switched off entirely in Settings.
+**OPEN** on any article fetches the linked page and renders a reader-mode version of it in Light
+typography. Light RSS does not use a WebView. It turns feed-provided HTML into a focused reading view of text and, when images are enabled, the pictures the publisher placed in the article. Scripts, advertisements, and tracking pixels are never loaded, and images can be switched off entirely in Settings.
 
 ## Built for LightOS
 

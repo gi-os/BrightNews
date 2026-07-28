@@ -265,6 +265,52 @@ class ReaderViewModel(
     }
 }
 
+data class ReaderPageUiState(
+    val isLoading: Boolean = true,
+    val page: ReaderPage? = null,
+    val error: String? = null,
+)
+
+/** Fetches and holds the reader-mode version of an article's linked page. */
+class ReaderPageViewModel(
+    private val articleId: String,
+    private val url: String,
+    private val repository: RssRepository,
+) : LightViewModel<Unit>() {
+    private val _state = MutableStateFlow(ReaderPageUiState())
+    val state = _state.asStateFlow()
+
+    init {
+        load(refresh = false)
+    }
+
+    fun retry() = load(refresh = true)
+
+    private fun load(refresh: Boolean) {
+        if (_state.value.isLoading && _state.value.page == null && refresh) return
+        _state.update { it.copy(isLoading = true, error = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val page = repository.readerPage(articleId, url, refresh)
+                val readable = with(ReaderExtractor) { page.hasContent() }
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        page = page.takeIf { readable },
+                        error = if (readable) null else "This page did not give up any readable text.",
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _state.update {
+                    it.copy(isLoading = false, error = RssRepository.friendlyMessage(error))
+                }
+            }
+        }
+    }
+}
+
 class SettingsViewModel(private val repository: RssRepository) : LightViewModel<Unit>() {
     val imagesEnabled: StateFlow<Boolean> = repository.imagesEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)

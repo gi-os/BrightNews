@@ -25,7 +25,15 @@ When you enter a normal website address, the app downloads that page once to loo
 
 ## Content handling
 
-Feed-provided HTML is converted to text and to an ordered list of text and image blocks. The app does not render a WebView, scripts, or advertisements, and it does not open external article pages. A feed host still sees the direct feed request itself.
+Feed-provided HTML is converted to text and to an ordered list of text and image blocks. The app does not render a WebView, scripts, or advertisements, and it renders pages fetched by OPEN as text rather than executing them. A feed host still sees the direct feed request itself.
+
+### Opening a linked page
+
+**OPEN** on an article downloads that article's page directly from its publisher, which is an
+ordinary HTTP request carrying your IP address, request time, requested URL, and the app user
+agent. It happens only when you press OPEN, never in the background. The page is parsed into text
+and images on the phone; scripts, trackers, and page furniture are discarded rather than executed,
+and nothing is stored beyond a per-session cache that is dropped when the app closes.
 
 ### Images
 

@@ -78,6 +78,14 @@ private fun ArticleListRow(
             .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.45f.gridUnitsAsDp()),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (imageStore != null && article.imageUrl.isNotBlank()) {
+            ArticleThumbnail(
+                imageStore = imageStore,
+                url = article.imageUrl,
+                lighten = article.isRead,
+                modifier = Modifier.padding(end = 0.75f.gridUnitsAsDp()),
+            )
+        }
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.Center,
@@ -117,14 +125,6 @@ private fun ArticleListRow(
                     lighten = true,
                 )
             }
-        }
-        if (imageStore != null && article.imageUrl.isNotBlank()) {
-            ArticleThumbnail(
-                imageStore = imageStore,
-                url = article.imageUrl,
-                lighten = article.isRead,
-                modifier = Modifier.padding(start = 0.75f.gridUnitsAsDp()),
-            )
         }
     }
 }
@@ -184,6 +184,21 @@ fun ArticleBody(
             )
             return@Column
         }
+        ContentBlocksBody(blocks, imageStore)
+    }
+}
+
+/**
+ * Renders ordered text and image blocks. Images are skipped entirely when [imageStore] is null,
+ * which is what Settings does when images are switched off.
+ */
+@Composable
+fun ContentBlocksBody(
+    blocks: List<ContentBlock>,
+    imageStore: ArticleImageStore?,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
         blocks.forEach { block ->
             when (block) {
                 is ContentBlock.Text -> LightText(
@@ -191,7 +206,7 @@ fun ArticleBody(
                     variant = LightTextVariant.Paragraph,
                     modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
                 )
-                is ContentBlock.Image -> ArticleImage(imageStore, block.url)
+                is ContentBlock.Image -> if (imageStore != null) ArticleImage(imageStore, block.url)
             }
         }
     }

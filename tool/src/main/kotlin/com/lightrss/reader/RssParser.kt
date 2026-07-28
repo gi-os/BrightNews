@@ -174,7 +174,11 @@ object RssParser {
      * Ordered body blocks for an article: readable text interleaved with the images the feed
      * actually placed in the markup. Falls back to a single text block when there is no HTML.
      */
-    fun contentBlocks(html: String, resolve: (String) -> String = { it }): List<ContentBlock> {
+    fun contentBlocks(
+        html: String,
+        resolve: (String) -> String = { it },
+        imagesRequired: Boolean = true,
+    ): List<ContentBlock> {
         if (html.isBlank()) return emptyList()
         val stripped = html.replace(Regex("""(?is)<(script|style)\b.*?</\1>"""), " ")
         val blocks = mutableListOf<ContentBlock>()
@@ -194,8 +198,8 @@ object RssParser {
         }
         appendText(blocks, stripped.substring(cursor.coerceAtMost(stripped.length)))
 
-        // Nothing but prose: let the plain content field handle it.
-        if (blocks.none { it is ContentBlock.Image }) return emptyList()
+        // For feed articles, prose with no images is left to the plain content field.
+        if (imagesRequired && blocks.none { it is ContentBlock.Image }) return emptyList()
         return blocks
     }
 

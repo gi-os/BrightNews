@@ -8,6 +8,22 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.6.0 - 2026-07-27
+
+### Added
+
+- OPEN at the bottom of an article fetches the page it links to and shows a reader-mode version
+  of it: body copy and its images, in Light typography, with no browser, scripts, or page
+  furniture. Pages are kept for the session, so going back and forth does not re-fetch.
+- `ReaderExtractor` finds the article by locating the longest run of substantial paragraphs after
+  navigation, promos, comment widgets, and footers have been stripped, then reuses the feed
+  parser's block conversion. Five tests cover extraction, junk removal, headline de-duplication,
+  pages with no `<article>` element, and pages with nothing to read.
+
+### Changed
+
+- List thumbnails moved to the left of the title.
+
 ## 1.5.0 - 2026-07-27
 
 ### Added

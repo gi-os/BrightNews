@@ -85,6 +85,24 @@ class RssApi {
         )
     }
 
+    /** Fetches an article page as HTML for reader mode. */
+    suspend fun loadPage(url: String): String {
+        val response = client.get(normalizeUrl(url)) {
+            header(HttpHeaders.UserAgent, USER_AGENT)
+            header(HttpHeaders.Accept, "text/html,application/xhtml+xml;q=0.9")
+        }
+        ensureSuccess(response)
+        val contentType = response.headers[HttpHeaders.ContentType].orEmpty()
+        if (contentType.isNotBlank() && !contentType.contains("html", ignoreCase = true)) {
+            throw IllegalArgumentException("That link is not a web page.")
+        }
+        val declaredLength = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        if (declaredLength != null && declaredLength > MAX_PAGE_BYTES) {
+            throw IllegalArgumentException("That page is too large to read here.")
+        }
+        return response.bodyAsText().take(MAX_PAGE_CHARS)
+    }
+
     /** Fetches raw image bytes for the reader. Returns null for anything that is not an image. */
     suspend fun loadImageBytes(url: String): ByteArray? {
         val response = client.get(url) {
@@ -121,6 +139,9 @@ class RssApi {
 
         /** Images larger than this are skipped rather than buffered into memory. */
         const val MAX_IMAGE_BYTES = 8L * 1024 * 1024
+
+        private const val MAX_PAGE_BYTES = 5L * 1024 * 1024
+        private const val MAX_PAGE_CHARS = 2_000_000
 
         fun normalizeUrl(raw: String): String {
             val candidate = raw.trim().let { value ->
@@ -175,6 +196,26 @@ class RssRepository(
     }
 
     fun clearImageCache() = images?.clear()
+
+    private val readerPages = mutableMapOf<String, ReaderPage>()
+    private val readerLock = Mutex()
+
+    /**
+     * Reader-mode version of an article's linked page. Cached per session so paging back and
+     * forth does not re-fetch, and so the page stays readable once it has been downloaded.
+     */
+    suspend fun readerPage(articleId: String, url: String, refresh: Boolean = false): ReaderPage {
+        if (url.isBlank()) throw IllegalArgumentException("This article has no link to open.")
+        if (!refresh) {
+            readerLock.withLock { readerPages[articleId] }?.let { return it }
+        }
+        val page = ReaderExtractor.extract(api.loadPage(url), url)
+        readerLock.withLock {
+            if (readerPages.size >= MAX_CACHED_READER_PAGES) readerPages.clear()
+            readerPages[articleId] = page
+        }
+        return page
+    }
 
     suspend fun initialize() {
         if (dao.getMetadata(STARTER_FEEDS_KEY) != null) return
@@ -301,6 +342,7 @@ class RssRepository(
         }
 
     companion object {
+        private const val MAX_CACHED_READER_PAGES = 12
         private const val STARTER_FEEDS_KEY = "starter_feeds_added"
         private const val SHOW_IMAGES_KEY = "show_images"
         private const val AUTO_REFRESH_AGE_MS = 15 * 60 * 1_000L
