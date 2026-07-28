@@ -22,6 +22,9 @@ import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.net.URI
 
+/** A fetched web page and the address it finally resolved to after any redirects. */
+data class PageDocument(val html: String, val url: String)
+
 sealed interface FeedLoadResult {
     data class Loaded(
         val feed: ParsedFeed,
@@ -85,13 +88,25 @@ class RssApi {
         )
     }
 
-    /** Fetches an article page as HTML for reader mode. */
-    suspend fun loadPage(url: String): String {
-        val response = client.get(normalizeUrl(url)) {
-            header(HttpHeaders.UserAgent, USER_AGENT)
-            header(HttpHeaders.Accept, "text/html,application/xhtml+xml;q=0.9")
+    /**
+     * Fetches an article page as HTML for reader mode, following redirects to wherever the link
+     * actually lands. Sites that turn away the Light RSS user agent are retried once as a desktop
+     * browser, which is what the reader is standing in for.
+     */
+    suspend fun loadPage(url: String): PageDocument {
+        val normalized = normalizeUrl(url)
+        var response = pageRequest(normalized, USER_AGENT)
+        if (response.status.value in BLOCKED_STATUSES) {
+            response = pageRequest(normalized, BROWSER_USER_AGENT)
+        }
+        if (response.status.value in BLOCKED_STATUSES) {
+            throw IllegalStateException(
+                "${response.status.value}: this site refuses outside readers. " +
+                    "It may need a subscription.",
+            )
         }
         ensureSuccess(response)
+
         val contentType = response.headers[HttpHeaders.ContentType].orEmpty()
         if (contentType.isNotBlank() && !contentType.contains("html", ignoreCase = true)) {
             throw IllegalArgumentException("That link is not a web page.")
@@ -100,8 +115,18 @@ class RssApi {
         if (declaredLength != null && declaredLength > MAX_PAGE_BYTES) {
             throw IllegalArgumentException("That page is too large to read here.")
         }
-        return response.bodyAsText().take(MAX_PAGE_CHARS)
+        return PageDocument(
+            html = response.bodyAsText().take(MAX_PAGE_CHARS),
+            url = response.call.request.url.toString(),
+        )
     }
+
+    private suspend fun pageRequest(url: String, userAgent: String): HttpResponse =
+        client.get(url) {
+            header(HttpHeaders.UserAgent, userAgent)
+            header(HttpHeaders.Accept, "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
+            header(HttpHeaders.AcceptLanguage, "en-US,en;q=0.9")
+        }
 
     /** Fetches raw image bytes for the reader. Returns null for anything that is not an image. */
     suspend fun loadImageBytes(url: String): ByteArray? {
@@ -140,6 +165,15 @@ class RssApi {
         /** Images larger than this are skipped rather than buffered into memory. */
         const val MAX_IMAGE_BYTES = 8L * 1024 * 1024
 
+        /**
+         * Used only for reader-mode page fetches, and only after the honest one is turned away.
+         * Feed requests always identify as Light RSS.
+         */
+        const val BROWSER_USER_AGENT =
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+
+        private val BLOCKED_STATUSES = setOf(401, 403, 406, 429, 451)
         private const val MAX_PAGE_BYTES = 5L * 1024 * 1024
         private const val MAX_PAGE_CHARS = 2_000_000
 
@@ -209,43 +243,34 @@ class RssRepository(
         if (!refresh) {
             readerLock.withLock { readerPages[articleId] }?.let { return it }
         }
-        val page = ReaderExtractor.extract(api.loadPage(url), url)
+
+        var document = api.loadPage(url)
+
+        // Feeds link through redirectors and tracking variants. Take the page's word for where
+        // the real article lives before deciding there is nothing to read.
+        val hop = ReaderExtractor.metaRefreshUrl(document.html, document.url)
+            ?: ReaderExtractor.canonicalUrl(document.html, document.url)
+        if (hop != null) {
+            runCatching { api.loadPage(hop) }.getOrNull()?.let { document = it }
+        }
+
+        var page = ReaderExtractor.extract(document.html, document.url)
+
+        // Some publishers keep a lighter AMP copy that a text reader can actually use.
+        if (!with(ReaderExtractor) { page.hasContent() }) {
+            ReaderExtractor.ampUrl(document.html, document.url)?.let { amp ->
+                runCatching { api.loadPage(amp) }.getOrNull()?.let { ampDocument ->
+                    val ampPage = ReaderExtractor.extract(ampDocument.html, ampDocument.url)
+                    if (with(ReaderExtractor) { ampPage.hasContent() }) page = ampPage
+                }
+            }
+        }
+
         readerLock.withLock {
             if (readerPages.size >= MAX_CACHED_READER_PAGES) readerPages.clear()
             readerPages[articleId] = page
         }
         return page
-    }
-
-    suspend fun initialize() {
-        if (dao.getMetadata(STARTER_FEEDS_KEY) != null) return
-        STARTER_FEEDS.forEach { starter ->
-            runCatching {
-                dao.insertFeed(FeedEntity(title = starter.first, url = starter.second))
-            }
-        }
-        dao.putMetadata(AppMetadataEntity(STARTER_FEEDS_KEY, "1"))
-    }
-
-    suspend fun addFeed(rawUrl: String): Long {
-        val normalized = RssApi.normalizeUrl(rawUrl)
-        dao.getFeedByUrl(normalized)?.let { throw IllegalArgumentException("You already follow this feed.") }
-        val result = api.load(normalized)
-        val loaded = result as? FeedLoadResult.Loaded
-            ?: throw IllegalStateException("The feed was not available.")
-        dao.getFeedByUrl(loaded.feedUrl)?.let { throw IllegalArgumentException("You already follow this feed.") }
-        return dao.insertFeedWithArticles(
-            feed = FeedEntity(
-                title = loaded.feed.title,
-                url = loaded.feedUrl,
-                siteUrl = loaded.feed.siteUrl,
-                description = loaded.feed.description,
-                lastFetchedAt = System.currentTimeMillis(),
-                etag = loaded.etag,
-                lastModified = loaded.lastModified,
-            ),
-            articles = loaded.feed.toEntities(feedId = 0, feedUrl = loaded.feedUrl),
-        )
     }
 
     suspend fun refreshAll(force: Boolean = true) {

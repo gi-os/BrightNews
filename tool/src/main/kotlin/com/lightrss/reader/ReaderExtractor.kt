@@ -20,6 +20,62 @@ data class ReaderPage(
  */
 object ReaderExtractor {
 
+    /**
+     * The address the page says it really lives at. Feeds often link through a redirector or to a
+     * tracking variant of a story, and those pages point back at the original with a canonical
+     * link. Returns null when the page agrees with [pageUrl] or declares nothing.
+     */
+    fun canonicalUrl(html: String, pageUrl: String): String? {
+        val declared = linkHref(html, "canonical")
+            ?: metaContent(html, "og:url")
+            ?: return null
+        val resolved = runCatching { URI(pageUrl).resolve(declared).toString() }.getOrNull() ?: return null
+        if (!resolved.startsWith("http", ignoreCase = true)) return null
+        return resolved.takeIf { differentPage(it, pageUrl) }
+    }
+
+    /** An AMP copy of the page, which is usually lighter and less hostile to a text reader. */
+    fun ampUrl(html: String, pageUrl: String): String? {
+        val declared = linkHref(html, "amphtml") ?: return null
+        val resolved = runCatching { URI(pageUrl).resolve(declared).toString() }.getOrNull() ?: return null
+        return resolved.takeIf { it.startsWith("http", ignoreCase = true) && differentPage(it, pageUrl) }
+    }
+
+    /** Follows `<meta http-equiv="refresh">` hops, which some redirectors use instead of a 302. */
+    fun metaRefreshUrl(html: String, pageUrl: String): String? {
+        val tag = Regex("""(?is)<meta\b[^>]*\bhttp-equiv\s*=\s*["']refresh["'][^>]*>""")
+            .find(html)
+            ?.value
+            ?: return null
+        val content = Regex("""(?is)\bcontent\s*=\s*["']([^"']*)["']""").find(tag)?.groupValues?.get(1)
+            ?: return null
+        val target = Regex("""(?i)url\s*=\s*(.+)$""").find(content.trim())?.groupValues?.get(1)?.trim('\'', '"', ' ')
+            ?: return null
+        val resolved = runCatching { URI(pageUrl).resolve(target).toString() }.getOrNull() ?: return null
+        return resolved.takeIf { it.startsWith("http", ignoreCase = true) && differentPage(it, pageUrl) }
+    }
+
+    private fun linkHref(html: String, rel: String): String? {
+        val tag = Regex("""(?is)<link\b[^>]*\brel\s*=\s*["'][^"']*\b${Regex.escape(rel)}\b[^"']*["'][^>]*>""")
+            .find(html)
+            ?.value
+            ?: return null
+        return Regex("""(?is)\bhref\s*=\s*["']([^"']+)["']""").find(tag)
+            ?.groupValues
+            ?.get(1)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    /** Compares two addresses ignoring the trailing slash, the query, and the fragment. */
+    private fun differentPage(candidate: String, current: String): Boolean {
+        fun key(value: String): String = runCatching {
+            val uri = URI(value)
+            (uri.host.orEmpty().removePrefix("www.") + uri.path.orEmpty().trimEnd('/')).lowercase()
+        }.getOrDefault(value)
+        return key(candidate) != key(current)
+    }
+
     fun extract(html: String, pageUrl: String): ReaderPage {
         val stripped = stripChrome(html)
         val body = mainRegion(stripped)

@@ -4,6 +4,7 @@ import com.lightrss.reader.ReaderExtractor.hasContent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ReaderExtractorTest {
@@ -100,5 +101,47 @@ class ReaderExtractorTest {
         )
 
         assertFalse(page.hasContent())
+    }
+
+    @Test
+    fun findsTheCanonicalAddressBehindARedirector() {
+        val html = """
+            <html><head>
+              <link rel="canonical" href="https://news.example.com/2026/07/the-real-story">
+            </head><body><p>Short stub while the real page loads somewhere else entirely.</p></body></html>
+        """.trimIndent()
+
+        assertEquals(
+            "https://news.example.com/2026/07/the-real-story",
+            ReaderExtractor.canonicalUrl(html, "https://link.tracker.example/r/abc123"),
+        )
+    }
+
+    @Test
+    fun ignoresACanonicalThatPointsAtThePageItself() {
+        val html = """
+            <html><head><link rel="canonical" href="https://news.example.com/story/"></head><body></body></html>
+        """.trimIndent()
+
+        assertNull(ReaderExtractor.canonicalUrl(html, "https://news.example.com/story?utm_source=rss"))
+    }
+
+    @Test
+    fun readsMetaRefreshAndAmpHops() {
+        val refresh = """
+            <html><head><meta http-equiv="refresh" content="0; url=https://example.com/final"></head></html>
+        """.trimIndent()
+        assertEquals(
+            "https://example.com/final",
+            ReaderExtractor.metaRefreshUrl(refresh, "https://short.example/x"),
+        )
+
+        val amp = """
+            <html><head><link rel="amphtml" href="/story/amp"></head></html>
+        """.trimIndent()
+        assertEquals(
+            "https://news.example.com/story/amp",
+            ReaderExtractor.ampUrl(amp, "https://news.example.com/story"),
+        )
     }
 }

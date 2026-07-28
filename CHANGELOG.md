@@ -8,6 +8,19 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.6.1 - 2026-07-27
+
+### Fixed
+
+- OPEN now lands on the real article rather than whatever the feed linked to. HTTP redirects are
+  followed, then the page's own `<link rel="canonical">`, `og:url`, or `<meta http-equiv=refresh>`
+  is chased one hop, which is what gets you off a tracking or redirector URL.
+- When a page yields nothing readable and declares an AMP copy, that copy is read instead.
+- Sites that turn away the Light RSS user agent — the New York Times among them — are retried once
+  as a desktop browser. Feed requests still always identify as Light RSS; only reader-mode page
+  fetches do this.
+- A refusal now says so: "403: this site refuses outside readers. It may need a subscription."
+
 ## 1.6.0 - 2026-07-27
 
 ### Added

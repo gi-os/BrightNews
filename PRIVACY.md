@@ -31,7 +31,10 @@ Feed-provided HTML is converted to text and to an ordered list of text and image
 
 **OPEN** on an article downloads that article's page directly from its publisher, which is an
 ordinary HTTP request carrying your IP address, request time, requested URL, and the app user
-agent. It happens only when you press OPEN, never in the background. The page is parsed into text
+agent. Redirects are followed, and the page's canonical address is fetched once more when it
+differs, so the publisher named in the link is not always the only host contacted. A site that
+rejects the `LightRSS/1.1` user agent with 401, 403, 406, 429, or 451 is retried once with a
+desktop browser user agent; feed refreshes never do this. It happens only when you press OPEN, never in the background. The page is parsed into text
 and images on the phone; scripts, trackers, and page furniture are discarded rather than executed,
 and nothing is stored beyond a per-session cache that is dropped when the app closes.
 
