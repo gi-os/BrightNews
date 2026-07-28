@@ -273,6 +273,37 @@ class RssRepository(
         return page
     }
 
+    suspend fun initialize() {
+        if (dao.getMetadata(STARTER_FEEDS_KEY) != null) return
+        STARTER_FEEDS.forEach { starter ->
+            runCatching {
+                dao.insertFeed(FeedEntity(title = starter.first, url = starter.second))
+            }
+        }
+        dao.putMetadata(AppMetadataEntity(STARTER_FEEDS_KEY, "1"))
+    }
+
+    suspend fun addFeed(rawUrl: String): Long {
+        val normalized = RssApi.normalizeUrl(rawUrl)
+        dao.getFeedByUrl(normalized)?.let { throw IllegalArgumentException("You already follow this feed.") }
+        val result = api.load(normalized)
+        val loaded = result as? FeedLoadResult.Loaded
+            ?: throw IllegalStateException("The feed was not available.")
+        dao.getFeedByUrl(loaded.feedUrl)?.let { throw IllegalArgumentException("You already follow this feed.") }
+        return dao.insertFeedWithArticles(
+            feed = FeedEntity(
+                title = loaded.feed.title,
+                url = loaded.feedUrl,
+                siteUrl = loaded.feed.siteUrl,
+                description = loaded.feed.description,
+                lastFetchedAt = System.currentTimeMillis(),
+                etag = loaded.etag,
+                lastModified = loaded.lastModified,
+            ),
+            articles = loaded.feed.toEntities(feedId = 0, feedUrl = loaded.feedUrl),
+        )
+    }
+
     suspend fun refreshAll(force: Boolean = true) {
         if (!syncMutex.tryLock()) return
         try {
