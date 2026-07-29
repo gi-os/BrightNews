@@ -693,30 +693,31 @@ class ReaderScreen(
                                     modifier = Modifier.padding(top = 1.25f.gridUnitsAsDp()),
                                 )
                             }
+
+                            // Actions sit at the end of the article rather than in a fixed bar, the
+                            // way the reader-mode page does, so the text gets the whole screen.
+                            val link = article.link
+                            if (link.isNotBlank()) {
+                                SettingsRow("OPEN", "Read the full page here") {
+                                    navigateTo({
+                                        ReaderPageScreen(it, article.id, link, article.title, repository)
+                                    })
+                                }
+                            }
+                            SettingsRow(
+                                title = if (article.isRead) "MARK UNREAD" else "MARK READ",
+                                detail = if (article.isRead) {
+                                    "Put it back in the unread list"
+                                } else {
+                                    "Take it out of the unread list"
+                                },
+                                onClick = viewModel::toggleRead,
+                            )
+                            SettingsRow("ARCHIVE", "Hide it from every list") {
+                                viewModel.archive { goBack() }
+                            }
                         }
                     }
-                    LightBottomBar(
-                        items = listOfNotNull(
-                            article.link.takeIf { it.isNotBlank() }?.let { link ->
-                                LightBarButton.Text(
-                                    text = "OPEN",
-                                    onClick = {
-                                        navigateTo({
-                                            ReaderPageScreen(it, article.id, link, article.title, repository)
-                                        })
-                                    },
-                                )
-                            },
-                            LightBarButton.Text(
-                                text = if (article.isRead) "UNREAD" else "READ",
-                                onClick = viewModel::toggleRead,
-                            ),
-                            LightBarButton.Text(
-                                text = "ARCHIVE",
-                                onClick = { viewModel.archive { goBack() } },
-                            ),
-                        ),
-                    )
                 }
             }
         }
