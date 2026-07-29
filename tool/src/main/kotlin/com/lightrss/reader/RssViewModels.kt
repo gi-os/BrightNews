@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -24,10 +25,28 @@ class HomeViewModel(
 ) : LightViewModel<Unit>() {
     private val _unreadOnly = MutableStateFlow(true)
     val unreadOnly: StateFlow<Boolean> = _unreadOnly.asStateFlow()
-    val articles: StateFlow<List<ArticleRow>> = _unreadOnly
-        .flatMapLatest(repository::observeInbox)
+
+    /** Whether home is narrowed to favourite feeds. Chosen in Subscriptions, stored in the database. */
+    val favoritesOnly: StateFlow<Boolean> = repository.homeFavoritesOnly
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val favoriteFeedCount: StateFlow<Int> = repository.observeFavoriteFeedCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val articles: StateFlow<List<ArticleRow>> = combine(_unreadOnly, favoritesOnly, ::Pair)
+        .flatMapLatest { (unreadOnly, favoritesOnly) ->
+            repository.observeInbox(unreadOnly, favoritesOnly)
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val syncState: StateFlow<SyncState> = repository.syncState
+
+    /**
+     * Bumped whenever the list should go back to the newest article: the first time the screen is
+     * shown, and again after the app has been away in the background. Coming back from the reader
+     * does not bump it, so a half-read list keeps its place.
+     */
+    private val _jumpToNewest = MutableStateFlow(0)
+    val jumpToNewest: StateFlow<Int> = _jumpToNewest.asStateFlow()
+    private var jumpPending = true
 
     private var initialized = false
 
@@ -41,9 +60,18 @@ class HomeViewModel(
 
     override fun onScreenShow(screen: SimpleLightScreen<Unit>) {
         super.onScreenShow(screen)
+        if (jumpPending) {
+            jumpPending = false
+            _jumpToNewest.update { it + 1 }
+        }
         if (initialized) {
             viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = false) }
         }
+    }
+
+    override fun onAppPause() {
+        super.onAppPause()
+        jumpPending = true
     }
 
     fun toggleFilter() = _unreadOnly.update { !it }
@@ -62,6 +90,15 @@ class HomeViewModel(
 class FeedsViewModel(private val repository: RssRepository) : LightViewModel<Unit>() {
     val feeds: StateFlow<List<FeedRow>> = repository.observeFeeds()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** The home scope, shown and flipped from the row above the subscription list. */
+    val favoritesOnly: StateFlow<Boolean> = repository.homeFavoritesOnly
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun toggleHomeScope() {
+        val next = !favoritesOnly.value
+        viewModelScope.launch(Dispatchers.IO) { repository.setHomeFavoritesOnly(next) }
+    }
 }
 
 data class AddFeedUiState(
@@ -176,6 +213,16 @@ class FeedViewModel(
         }
     }
 
+    /** Stars or unstars this feed for the favourites-only home list. */
+    fun toggleFavorite() {
+        val next = !(feed.value?.isFavorite ?: false)
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.setFeedFavorite(feedId, next)
+            _state.update {
+                it.copy(message = if (next) "Shown on home" else "Hidden from home")
+            }
+        }
+    }
 }
 
 class DeleteFeedViewModel(

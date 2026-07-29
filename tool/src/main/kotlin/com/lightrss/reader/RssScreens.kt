@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +52,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             RssDatabase::class.java,
             "light-rss.db",
             RssDatabase.MIGRATION_1_2,
+            RssDatabase.MIGRATION_2_3,
         )
         val repository = RssRepository(
             dao = database.rssDao(),
@@ -64,9 +66,19 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         val colors by LightThemeController.colors.collectAsState()
         val articles by viewModel.articles.collectAsState()
         val unreadOnly by viewModel.unreadOnly.collectAsState()
+        val favoritesOnly by viewModel.favoritesOnly.collectAsState()
+        val favoriteCount by viewModel.favoriteFeedCount.collectAsState()
         val sync by viewModel.syncState.collectAsState()
+        val jumpToNewest by viewModel.jumpToNewest.collectAsState()
         val repository = viewModel.repository
         val imageStore = rememberImageStore(repository)
+        val listState = rememberLazyListState()
+
+        // Opening the app lands on the newest article, even when a sync has just slipped fresh
+        // items in above where the list was left.
+        LaunchedEffect(jumpToNewest) {
+            if (jumpToNewest > 0) listState.scrollToItem(0)
+        }
 
         LightTheme(colors = colors) {
             Column(
@@ -74,14 +86,14 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                key(unreadOnly) {
+                key(unreadOnly, favoritesOnly) {
                     LightTopBar(
                         leftButton = LightBarButton.LightIcon(
                             icon = LightIcons.LIST,
                             onClick = { navigateTo({ FeedsScreen(it, repository) }) },
                             contentDescription = "Subscriptions",
                         ),
-                        center = LightTopBarCenter.Text("RSS"),
+                        center = LightTopBarCenter.Text(if (favoritesOnly) "Favorites" else "RSS"),
                         rightButton = LightBarButton.LightIcon(
                             icon = LightIcons.SEARCH,
                             onClick = { navigateTo({ SearchScreen(it, repository) }) },
@@ -97,22 +109,22 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                 )
                 ArticleList(
                     articles = articles,
-                    emptyMessage = if (unreadOnly) {
-                        "You’re all caught up.\n\nSwitch the filter to revisit the archive."
-                    } else {
-                        "No articles yet.\n\nRefresh or add a subscription."
+                    emptyMessage = when {
+                        favoritesOnly && favoriteCount == 0 ->
+                            "No favorite feeds yet.\n\nStar a feed in Subscriptions, or switch home back to all feeds."
+                        favoritesOnly && unreadOnly ->
+                            "You’re all caught up on your favorites.\n\nSwitch the filter to revisit the archive."
+                        unreadOnly ->
+                            "You’re all caught up.\n\nSwitch the filter to revisit the archive."
+                        else -> "No articles yet.\n\nRefresh or add a subscription."
                     },
                     onOpen = { row -> navigateTo({ ReaderScreen(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
                     imageStore = imageStore,
+                    listState = listState,
                 )
                 LightBottomBar(
                     items = listOf(
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.STAR_OUTLINE,
-                            onClick = { navigateTo({ SavedScreen(it, repository) }) },
-                            contentDescription = "Saved articles",
-                        ),
                         LightBarButton.Text(
                             text = if (unreadOnly) "UNREAD" else "ALL",
                             onClick = viewModel::toggleFilter,
@@ -146,6 +158,7 @@ class FeedsScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val feeds by viewModel.feeds.collectAsState()
+        val favoritesOnly by viewModel.favoritesOnly.collectAsState()
 
         LightTheme(colors = colors) {
             Column(
@@ -165,6 +178,15 @@ class FeedsScreen(
                         },
                     ),
                 )
+                SettingsRow(
+                    title = "HOME SHOWS",
+                    detail = if (favoritesOnly) {
+                        "Favorites only — tap for all feeds"
+                    } else {
+                        "All feeds — tap for favorites only"
+                    },
+                    onClick = viewModel::toggleHomeScope,
+                )
                 FeedList(
                     feeds = feeds,
                     onOpen = { row -> navigateTo({ FeedScreen(it, row.feed.id, repository) }) },
@@ -172,6 +194,11 @@ class FeedsScreen(
                 )
                 LightBottomBar(
                     items = listOf(
+                        LightBarButton.LightIcon(
+                            icon = LightIcons.STAR_OUTLINE,
+                            onClick = { navigateTo({ SavedScreen(it, repository) }) },
+                            contentDescription = "Saved articles",
+                        ),
                         LightBarButton.LightIcon(
                             icon = LightIcons.SETTINGS,
                             onClick = { navigateTo({ SettingsScreen(it, repository) }) },
@@ -415,6 +442,15 @@ class FeedScreen(
                 LightBottomBar(
                     items = listOf(
                         LightBarButton.Text("READ ALL", onClick = viewModel::markAllRead),
+                        LightBarButton.LightIcon(
+                            icon = if (feed?.isFavorite == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
+                            onClick = viewModel::toggleFavorite,
+                            contentDescription = if (feed?.isFavorite == true) {
+                                "Hide from home"
+                            } else {
+                                "Show on home"
+                            },
+                        ),
                         LightBarButton.LightIcon(
                             LightIcons.DELETE,
                             onClick = {

@@ -227,8 +227,31 @@ class RssRepository(
     private val _syncState = MutableStateFlow(SyncState())
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
 
-    fun observeInbox(unreadOnly: Boolean): Flow<List<ArticleRow>> =
-        if (unreadOnly) dao.observeUnread() else dao.observeInbox()
+    /**
+     * The home list. [favoritesOnly] narrows it to feeds the reader starred, [unreadOnly] to
+     * articles they have not opened yet; the two are independent.
+     */
+    fun observeInbox(unreadOnly: Boolean, favoritesOnly: Boolean = false): Flow<List<ArticleRow>> =
+        when {
+            favoritesOnly && unreadOnly -> dao.observeFavoriteUnread()
+            favoritesOnly -> dao.observeFavoriteInbox()
+            unreadOnly -> dao.observeUnread()
+            else -> dao.observeInbox()
+        }
+
+    fun observeFavoriteFeedCount(): Flow<Int> = dao.observeFavoriteFeedCount().distinctUntilChanged()
+
+    suspend fun setFeedFavorite(feedId: Long, isFavorite: Boolean) =
+        dao.setFeedFavorite(feedId, isFavorite)
+
+    /** Whether the home list is narrowed to favourite feeds. Defaults to off. */
+    val homeFavoritesOnly: Flow<Boolean> = dao.observeMetadata(HOME_FAVORITES_KEY)
+        .map { it == "1" }
+        .distinctUntilChanged()
+
+    suspend fun setHomeFavoritesOnly(enabled: Boolean) {
+        dao.putMetadata(AppMetadataEntity(HOME_FAVORITES_KEY, if (enabled) "1" else "0"))
+    }
 
     fun observeStarred(): Flow<List<ArticleRow>> = dao.observeStarred()
     fun observeFeeds(): Flow<List<FeedRow>> = dao.observeFeeds()
@@ -450,6 +473,7 @@ class RssRepository(
         private const val AGENT_KEY = "site_agent:"
         private const val STARTER_FEEDS_KEY = "starter_feeds_added"
         private const val SHOW_IMAGES_KEY = "show_images"
+        private const val HOME_FAVORITES_KEY = "home_favorites_only"
         private const val AUTO_REFRESH_AGE_MS = 15 * 60 * 1_000L
         private const val MAX_TITLE_LENGTH = 600
         private const val MAX_AUTHOR_LENGTH = 300

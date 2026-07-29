@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -45,6 +47,7 @@ fun ArticleList(
     onOpen: (ArticleRow) -> Unit,
     modifier: Modifier = Modifier,
     imageStore: ArticleImageStore? = null,
+    listState: LazyListState = rememberLazyListState(),
 ) {
     if (articles.isEmpty()) {
         EmptyState(emptyMessage, modifier)
@@ -52,6 +55,7 @@ fun ArticleList(
     }
     LightLazyScrollView(
         modifier = modifier,
+        listState = listState,
         uniformItemHeightGridUnits = ARTICLE_ROW_HEIGHT,
     ) {
         items(articles, key = { it.article.id }) { row ->
@@ -262,6 +266,14 @@ fun FeedList(
                 verticalArrangement = Arrangement.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (row.feed.isFavorite) {
+                        LightIcon(
+                            icon = LightIcons.STAR,
+                            size = 0.9f,
+                            contentDescription = "Shown on home",
+                            modifier = Modifier.padding(end = 0.5f.gridUnitsAsDp()),
+                        )
+                    }
                     LightText(
                         text = row.feed.title,
                         variant = LightTextVariant.Paragraph,

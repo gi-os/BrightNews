@@ -31,6 +31,8 @@ data class FeedEntity(
     val etag: String? = null,
     val lastModified: String? = null,
     val errorMessage: String? = null,
+    /** Whether this feed is one of the favourites the home screen can be narrowed to. */
+    val isFavorite: Boolean = false,
 )
 
 @Entity(
@@ -108,6 +110,26 @@ interface RssDao {
         """
         SELECT a.*, f.title AS feedTitle
         FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE a.isArchived = 0 AND f.isFavorite = 1
+        ORDER BY a.publishedAt DESC, a.insertedAt DESC
+        """,
+    )
+    fun observeFavoriteInbox(): Flow<List<ArticleRow>>
+
+    @Query(
+        """
+        SELECT a.*, f.title AS feedTitle
+        FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE a.isArchived = 0 AND a.isRead = 0 AND f.isFavorite = 1
+        ORDER BY a.publishedAt DESC, a.insertedAt DESC
+        """,
+    )
+    fun observeFavoriteUnread(): Flow<List<ArticleRow>>
+
+    @Query(
+        """
+        SELECT a.*, f.title AS feedTitle
+        FROM articles a JOIN feeds f ON f.id = a.feedId
         WHERE a.isStarred = 1
         ORDER BY a.publishedAt DESC, a.insertedAt DESC
         """,
@@ -152,6 +174,9 @@ interface RssDao {
         """,
     )
     fun observeFeeds(): Flow<List<FeedRow>>
+
+    @Query("SELECT COUNT(*) FROM feeds WHERE isFavorite = 1")
+    fun observeFavoriteFeedCount(): Flow<Int>
 
     @Query("SELECT * FROM feeds ORDER BY title COLLATE NOCASE")
     suspend fun getFeeds(): List<FeedEntity>
@@ -232,6 +257,9 @@ interface RssDao {
     @Query("UPDATE feeds SET errorMessage = :message WHERE id = :feedId")
     suspend fun setFeedError(feedId: Long, message: String)
 
+    @Query("UPDATE feeds SET isFavorite = :isFavorite WHERE id = :feedId")
+    suspend fun setFeedFavorite(feedId: Long, isFavorite: Boolean)
+
     @Query(
         """
         UPDATE articles SET
@@ -300,7 +328,7 @@ interface RssDao {
 
 @Database(
     entities = [FeedEntity::class, ArticleEntity::class, AppMetadataEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class RssDatabase : RoomDatabase() {
@@ -312,6 +340,13 @@ abstract class RssDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE articles ADD COLUMN imageUrl TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE articles ADD COLUMN contentBlocks TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /** Adds the feed favourite flag. Nothing is a favourite until the reader stars it. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE feeds ADD COLUMN isFavorite INTEGER NOT NULL DEFAULT 0")
             }
         }
     }
