@@ -57,6 +57,24 @@ All screenshots show public feed content.
   turns any feed or site address into a code, in the browser.
 - **Keyboard choice.** Paste an address, use the phone keyboard, or use the Light
   keyboard.
+- **The brightness wheel scrolls.** Turn the wheel and the list, the article, the reader
+  page or the settings menu moves, a notch at a time, without a thumb over the text. The
+  wheel is not a rotary encoder — it is an optical sensor that emits one key pair per
+  notch, relabelled `WHEEL_CCW` and `WHEEL_CW` in the LightOS keylayout — and `hw/` pays
+  each notch out over the next few frames, which is what makes a fast spin read as one
+  sweep instead of a stack of jumps. A stray brush is ignored: the first notch after a
+  pause is held until a second one confirms it. Only the turns are handled here. The wheel
+  click, the camera button and brightness belong to
+  [LightControl](https://github.com/gi-os/LightControl), which owns them across the phone
+  and passes bare turns through to `com.lightrss.reader` precisely so the reader can do
+  this.
+
+  Getting the key at all needed one addition to the vendored SDK. A tool has no window of
+  its own — `LightActivity` owns it — and the build rules block the activity, the window
+  and `LocalView` from tool code, so there is nowhere in `tool/` to override
+  `dispatchKeyEvent`. `LightHardwareKeys` in `sdk/client` is that seam: one handler, called
+  from `LightActivity.dispatchKeyEvent` before the event reaches the view hierarchy, which
+  is the only place a key can be claimed ahead of a focused WebView or text field.
 - **A reader that opens the real page.** **OPEN** fetches the linked article and renders
   body copy and images in Light typography. Reader mode uses no WebView, so no script,
   advertisement or tracking pixel loads there.

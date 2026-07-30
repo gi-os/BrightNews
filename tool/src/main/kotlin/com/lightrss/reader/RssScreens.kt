@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import com.lightrss.reader.hw.WheelScroll
+import com.lightrss.reader.hw.WheelKeys
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
@@ -80,6 +83,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             if (jumpToNewest > 0) listState.scrollToItem(0)
         }
 
+        WheelKeys()
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -160,6 +164,7 @@ class FeedsScreen(
         val feeds by viewModel.feeds.collectAsState()
         val favoritesOnly by viewModel.favoritesOnly.collectAsState()
 
+        WheelKeys()
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -412,6 +417,7 @@ class FeedScreen(
         val state by viewModel.state.collectAsState()
         val imageStore = rememberImageStore(repository)
 
+        WheelKeys()
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -522,6 +528,7 @@ class SavedScreen(
         val colors by LightThemeController.colors.collectAsState()
         val articles by viewModel.articles.collectAsState()
         val imageStore = rememberImageStore(repository)
+        WheelKeys()
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -561,6 +568,7 @@ class SearchScreen(
         val keyboard = rememberKeyboardOptions()
         var lightKeys by rememberSaveable { mutableStateOf(false) }
 
+        WheelKeys()
         LightTheme(colors = colors) {
             if (state.editorOpen) {
                 if (lightKeys) {
@@ -624,7 +632,10 @@ class ReaderScreen(
         val row by viewModel.article.collectAsState()
         val article = row?.article
         val imageStore = rememberImageStore(repository)
+        val scroll = rememberScrollState()
 
+        WheelKeys()
+        WheelScroll(scroll)
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -651,6 +662,7 @@ class ReaderScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
+                        scrollState = scroll,
                     ) {
                         Column(
                             modifier = Modifier.padding(
@@ -745,7 +757,10 @@ class ReaderPageScreen(
         val imageStore = rememberImageStore(repository)
         val page = state.page
         val target = state.resolvedUrl.ifBlank { link }
+        val scroll = rememberScrollState()
 
+        WheelKeys()
+        WheelScroll(scroll)
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -763,6 +778,7 @@ class ReaderPageScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
+                        scrollState = scroll,
                     ) {
                         Column(
                             modifier = Modifier.padding(
@@ -838,6 +854,10 @@ class SettingsScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val imagesEnabled by viewModel.imagesEnabled.collectAsState()
+        val scroll = rememberScrollState()
+
+        WheelKeys()
+        WheelScroll(scroll)
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -848,7 +868,7 @@ class SettingsScreen(
                     leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                     center = LightTopBarCenter.Text("Settings"),
                 )
-                LightScrollView(modifier = Modifier.weight(1f)) {
+                LightScrollView(modifier = Modifier.weight(1f), scrollState = scroll) {
                     SettingsRow("APPEARANCE", "Toggle light / dark") {
                         LightThemeController.toggle()
                     }
@@ -906,7 +926,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.10.0",
+                            text = "VERSION 1.12.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

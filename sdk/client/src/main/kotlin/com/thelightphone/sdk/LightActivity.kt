@@ -2,6 +2,7 @@ package com.thelightphone.sdk
 
 import android.content.Context
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -119,6 +120,14 @@ class LightActivity internal constructor() : ComponentActivity() {
             }
         )
     }
+
+    /**
+     * Hardware keys reach the window callback before the view hierarchy is walked, so a tool that
+     * has registered with [LightHardwareKeys] gets first refusal here. See that object for why
+     * this seam exists at all.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        LightHardwareKeys.handler?.invoke(event) == true || super.dispatchKeyEvent(event)
 
     override fun onPause() {
         super.onPause()

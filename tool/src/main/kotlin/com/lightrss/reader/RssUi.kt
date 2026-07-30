@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import com.lightrss.reader.hw.WheelScroll
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightIcon
@@ -53,6 +54,7 @@ fun ArticleList(
         EmptyState(emptyMessage, modifier)
         return
     }
+    WheelScroll(listState)
     LightLazyScrollView(
         modifier = modifier,
         listState = listState,
@@ -247,13 +249,16 @@ fun FeedList(
     feeds: List<FeedRow>,
     onOpen: (FeedRow) -> Unit,
     modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState(),
 ) {
     if (feeds.isEmpty()) {
         EmptyState("No subscriptions yet.\n\nTap + to add a website or feed.", modifier)
         return
     }
+    WheelScroll(listState)
     LightLazyScrollView(
         modifier = modifier,
+        listState = listState,
         uniformItemHeightGridUnits = FEED_ROW_HEIGHT,
     ) {
         items(feeds, key = { it.feed.id }) { row ->

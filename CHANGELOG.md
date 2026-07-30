@@ -8,6 +8,23 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 1.12.0 - 2026-07-29
+
+### Added
+
+- The brightness wheel scrolls. Article lists, the subscription list, the article, the reader page
+  and Settings all move a notch at a time, and the sign-in WebView does too. Notches are paid out
+  over the following frames rather than applied on arrival, so a fast spin reads as one sweep, and
+  the first notch after a pause is held back until a second one confirms it, so a thumb resting on
+  the wheel no longer moves the page.
+- The version shown in Settings was still 1.10.0. It now matches the build.
+
+### Changed
+
+- `LightHardwareKeys` in the vendored SDK hands a tool first refusal on a hardware key, from
+  `LightActivity.dispatchKeyEvent`. A tool owns no window and the build rules keep it away from the
+  activity and `LocalView`, so there was no way for one to see the wheel at all.
+
 ## 1.10.0 - 2026-07-28
 
 ### Fixed

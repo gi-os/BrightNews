@@ -15,6 +15,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import com.lightrss.reader.hw.WheelScroll
+import com.lightrss.reader.hw.WheelKeys
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SealedLightActivity
@@ -74,6 +76,9 @@ class SignInScreen(
             manager.flush()
             viewModel.keep(manager.getCookie(pageUrl), view?.settings?.userAgentString)
         }
+
+        WheelKeys()
+        WheelScroll(webView.value)
 
         DisposableEffect(Unit) {
             onDispose {
