@@ -57,24 +57,8 @@ All screenshots show public feed content.
   turns any feed or site address into a code, in the browser.
 - **Keyboard choice.** Paste an address, use the phone keyboard, or use the Light
   keyboard.
-- **The brightness wheel scrolls.** Turn the wheel and the list, the article, the reader
-  page or the settings menu moves, a notch at a time, without a thumb over the text. The
-  wheel is not a rotary encoder — it is an optical sensor that emits one key pair per
-  notch, relabelled `WHEEL_CCW` and `WHEEL_CW` in the LightOS keylayout — and `hw/` pays
-  each notch out over the next few frames, which is what makes a fast spin read as one
-  sweep instead of a stack of jumps. A stray brush is ignored: the first notch after a
-  pause is held until a second one confirms it. Only the turns are handled here. The wheel
-  click, the camera button and brightness belong to
-  [LightControl](https://github.com/gi-os/LightControl), which owns them across the phone
-  and passes bare turns through to `com.lightrss.reader` precisely so the reader can do
-  this.
-
-  Getting the key at all needed one addition to the vendored SDK. A tool has no window of
-  its own — `LightActivity` owns it — and the build rules block the activity, the window
-  and `LocalView` from tool code, so there is nowhere in `tool/` to override
-  `dispatchKeyEvent`. `LightHardwareKeys` in `sdk/client` is that seam: one handler, called
-  from `LightActivity.dispatchKeyEvent` before the event reaches the view hierarchy, which
-  is the only place a key can be claimed ahead of a focused WebView or text field.
+- **The brightness wheel scrolls.** A notch moves the list, the article, the reader page or
+  the settings menu, without a thumb over the text. [The wheel](#the-wheel) has the detail.
 - **A reader that opens the real page.** **OPEN** fetches the linked article and renders
   body copy and images in Light typography. Reader mode uses no WebView, so no script,
   advertisement or tracking pixel loads there.
@@ -84,6 +68,60 @@ All screenshots show public feed content.
   rarely honors one without the other. Reader fetches for that host then send both. Feed
   refreshes never do. This WebView is the only one in the app and the only place a page's
   scripts run.
+
+## The wheel
+
+Turn the wheel and the list, the article, the reader page or the settings menu moves, a notch
+at a time, without a thumb over the text. **Only this app has to be installed for that.**
+Light patched `/system/usr/keylayout/Generic.kl`, so a notch arrives at whichever app holds
+focus as an ordinary key event, and LightRSS handles it itself. There is no companion
+service, no permission and no root involved.
+
+The wheel is not a rotary encoder — it is an optical sensor that emits one key pair per notch,
+relabelled `WHEEL_CCW` and `WHEEL_CW` in the LightOS keylayout — and `hw/` pays each notch out
+over the next few frames, which is what makes a fast spin read as one sweep instead of a stack
+of jumps. A stray brush is ignored: the first notch after a pause is held until a second one
+confirms it.
+
+Getting the key at all needed one addition to the vendored SDK. A tool has no window of its
+own — `LightActivity` owns it — and the build rules block the activity, the window and
+`LocalView` from tool code, so there is nowhere in `tool/` to override `dispatchKeyEvent`.
+`LightHardwareKeys` in `sdk/client` is that seam: one handler, called from
+`LightActivity.dispatchKeyEvent` before the event reaches the view hierarchy, which is the
+only place a key can be claimed ahead of a focused WebView or text field. Both halves of the
+notch are consumed there, because an unclaimed key in an SDK tool is forwarded to the LightOS
+server, which reads a turn as a brightness change. Consuming both is what makes the wheel mean
+scrolling, and nothing else, while LightRSS is in front.
+
+Only the turns are handled here. The wheel click, the camera button and brightness belong to
+[LightControl](https://github.com/gi-os/LightControl), which is **optional** and owns them
+across the whole phone: hold the wheel in and turn for brightness, tap it for the flashlight,
+press the camera button for the camera. Each of those is rebindable, tap and hold separately,
+to any installed app, and apps with no wheel handling of their own get brightness or a
+synthetic-swipe scroll out of it.
+
+Installing it does not take the scrolling away. `com.lightrss.reader` is one of the ids
+LightControl passes bare turns straight through to, with `com.gios.*`, `com.lightfastread` and
+`com.lightphone.spotify`, because per-notch scrolling inside an app beats anything reachable
+from outside it.
+
+```bash
+# Optional: LightControl, for brightness, the flashlight and the camera button
+adb install -r LightControl-v1.0.x.apk
+
+# The key service. NOTE: this setting is a list, and this command REPLACES it —
+# if you also run LightVoice's push-to-talk, colon-join both components instead.
+adb shell settings put secure enabled_accessibility_services \
+  com.gios.lightcontrol/com.gios.lightcontrol.keys.ControlService
+adb shell settings put secure accessibility_enabled 1
+
+# Brightness, and the level readout + opening apps from the service
+adb shell appops set com.gios.lightcontrol WRITE_SETTINGS allow
+adb shell appops set com.gios.lightcontrol SYSTEM_ALERT_WINDOW allow
+```
+
+The current build is at
+[LightControl/releases/latest](https://github.com/gi-os/LightControl/releases/latest).
 
 ## What it inherited
 
