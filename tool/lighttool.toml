@@ -1,8 +1,10 @@
 [tool]
+# The id does not change with the name. Android identifies an install by it, so renaming it would
+# orphan every subscription, saved article and read state already on the phone.
 id = "com.lightrss.reader"
-label = "RSS"
-versionCode = 16
-versionName = "1.12.0"
+label = "News"
+versionCode = 17
+versionName = "2.0.0"
 permissions = [
     "android.permission.INTERNET",
     "android.permission.CAMERA",

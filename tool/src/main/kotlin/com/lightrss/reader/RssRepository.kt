@@ -227,17 +227,23 @@ class RssRepository(
     private val _syncState = MutableStateFlow(SyncState())
     val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
 
+    /** The Gmail side. See [NewsletterSync] for why a label is modelled as a feed. */
+    val newsletters = NewsletterSync(dao)
+
     /**
-     * The home list. [favoritesOnly] narrows it to feeds the reader starred, [unreadOnly] to
-     * articles they have not opened yet; the two are independent.
+     * The article list. [source] picks a section ([Source.RSS], [Source.GMAIL]) or null for
+     * both; [favoritesOnly] narrows to feeds the reader starred, [unreadOnly] to articles they
+     * have not opened yet. All three are independent.
      */
-    fun observeInbox(unreadOnly: Boolean, favoritesOnly: Boolean = false): Flow<List<ArticleRow>> =
-        when {
-            favoritesOnly && unreadOnly -> dao.observeFavoriteUnread()
-            favoritesOnly -> dao.observeFavoriteInbox()
-            unreadOnly -> dao.observeUnread()
-            else -> dao.observeInbox()
-        }
+    fun observeInbox(
+        unreadOnly: Boolean,
+        favoritesOnly: Boolean = false,
+        source: String? = null,
+    ): Flow<List<ArticleRow>> = dao.observeInbox(unreadOnly, favoritesOnly, source)
+
+    /** Unread in one section, for the count beside it on the home screen. */
+    fun observeUnreadCount(source: String): Flow<Int> =
+        dao.observeUnreadCount(source).distinctUntilChanged()
 
     fun observeFavoriteFeedCount(): Flow<Int> = dao.observeFavoriteFeedCount().distinctUntilChanged()
 
@@ -254,7 +260,7 @@ class RssRepository(
     }
 
     fun observeStarred(): Flow<List<ArticleRow>> = dao.observeStarred()
-    fun observeFeeds(): Flow<List<FeedRow>> = dao.observeFeeds()
+    fun observeFeeds(source: String? = null): Flow<List<FeedRow>> = dao.observeFeeds(source)
     fun observeFeed(feedId: Long): Flow<FeedEntity?> = dao.observeFeed(feedId)
     fun observeFeedArticles(feedId: Long): Flow<List<ArticleRow>> = dao.observeFeedArticles(feedId)
     fun observeArticle(articleId: String): Flow<ArticleRow?> = dao.observeArticle(articleId)
@@ -266,8 +272,17 @@ class RssRepository(
         .distinctUntilChanged()
 
     suspend fun setImagesEnabled(enabled: Boolean) {
+        val previous = dao.getMetadata(SHOW_IMAGES_KEY) != "0"
         dao.putMetadata(AppMetadataEntity(SHOW_IMAGES_KEY, if (enabled) "1" else "0"))
-        if (!enabled) images?.clear()
+        if (!enabled) {
+            images?.clear()
+            return
+        }
+        // Switching images back on has to throw the cached newsletter bodies away. A
+        // newsletter's own art is inlined once, when the message is stored, because a WebView
+        // cannot attach an OAuth header to fetch a MIME part later — so a body cached with
+        // images off has no art in it and never will. The next sync refetches them.
+        if (!previous) newsletters.clearBodies()
     }
 
     fun clearImageCache() = images?.clear()
@@ -344,6 +359,9 @@ class RssRepository(
     }
 
     suspend fun initialize() {
+        // Published before anything reads it, so the newsletters section can render its
+        // signed-in state without suspending on the first frame.
+        newsletters.auth.refreshState()
         if (dao.getMetadata(STARTER_FEEDS_KEY) != null) return
         STARTER_FEEDS.forEach { starter ->
             runCatching {
@@ -413,16 +431,53 @@ class RssRepository(
         return syncMutex.withLock { refreshFeedInternal(feed) }
     }
 
-    suspend fun setRead(articleId: String, isRead: Boolean) = dao.setRead(articleId, isRead)
+    /**
+     * Reading a newsletter has to reach Gmail; reading an article only has to reach this
+     * table. [NewsletterSync.markRead] flips the row first and pushes second, so the two
+     * behave identically from the reader's side.
+     */
+    suspend fun setRead(articleId: String, isRead: Boolean) {
+        if (!NewsletterSync.isNewsletter(articleId)) {
+            dao.setRead(articleId, isRead)
+            return
+        }
+        if (isRead) {
+            newsletters.markRead(articleId)
+        } else {
+            // Gmail is never told to re-mark something unread — the app only ever clears
+            // UNREAD. Clearing pendingRead alongside is what stops the next sync from pushing
+            // a read the reader has just taken back.
+            dao.setReadPending(articleId, isRead = false, pending = false)
+        }
+    }
+
     suspend fun setStarred(articleId: String, isStarred: Boolean) = dao.setStarred(articleId, isStarred)
     suspend fun setArchived(articleId: String, isArchived: Boolean) = dao.setArchived(articleId, isArchived)
-    suspend fun markFeedRead(feedId: Long) = dao.markFeedRead(feedId)
-    suspend fun markAllRead() = dao.markAllRead()
+
+    suspend fun markFeedRead(feedId: Long) {
+        dao.markFeedRead(feedId)
+        dao.queueNewsletterReads(feedId)
+    }
+
+    suspend fun markAllRead() {
+        dao.markAllRead()
+        dao.queueNewsletterReads(null)
+    }
+
     suspend fun deleteReadUnstarred() = dao.deleteReadUnstarred()
     suspend fun deleteFeed(feedId: Long) = dao.deleteFeed(feedId)
-    fun close() = api.close()
+
+    fun close() {
+        api.close()
+        newsletters.close()
+    }
 
     private suspend fun refreshFeedInternal(feed: FeedEntity): Result<Unit> = runCatching {
+        if (feed.sourceType == Source.GMAIL) {
+            newsletters.sync(feed, loadImages = dao.getMetadata(SHOW_IMAGES_KEY) != "0")
+            dao.markFeedNotModified(feed.id, System.currentTimeMillis())
+            return@runCatching
+        }
         when (val result = api.load(feed.url, feed.etag, feed.lastModified)) {
             FeedLoadResult.NotModified -> dao.markFeedNotModified(feed.id, System.currentTimeMillis())
             is FeedLoadResult.Loaded -> {

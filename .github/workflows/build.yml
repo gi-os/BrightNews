@@ -42,3 +42,11 @@ jobs:
           GH_PACKAGES_USER: ${{ secrets.GH_PACKAGES_USER }}
           GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
         run: ./gradlew :tool:testDebugUnitTest :tool:lintDebug :tool:assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: LightNews-debug
+          path: tool/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14

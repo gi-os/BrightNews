@@ -88,6 +88,10 @@ dependencies {
     implementation(libs.androidx.camera.mlkit.vision)
     implementation(libs.mlkit.barcode.scanning)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // Newsletter rendering. Also on the unit-test classpath: NewsletterHtml is the one piece of
+    // the Gmail path that can be tested without a device or a mailbox.
+    implementation(libs.jsoup)
     testImplementation(libs.kotlin.test)
+    testImplementation(libs.jsoup)
     ksp(libs.androidx.room.compiler)
 }

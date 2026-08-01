@@ -45,6 +45,14 @@ import com.thelightphone.sdk.ui.LightTopBarCenter
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
 
+/**
+ * The two sections.
+ *
+ * RSS and newsletters are one app because they are one habit, but they are two sections because
+ * they are not one kind of reading. Everything below this screen is shared — the same article
+ * table, the same search, the same saved list, the same read state — and the split is a filter
+ * on `sourceType`, not a second stack.
+ */
 @InitialScreen
 class HomeScreen(sealedActivity: SealedLightActivity) :
     LightScreen<Unit, HomeViewModel>(sealedActivity) {
@@ -53,9 +61,12 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
     override fun createViewModel(): HomeViewModel {
         val database = lightContext.buildDatabase(
             RssDatabase::class.java,
+            // The file keeps its name across the rename. Pointing at a new one would silently
+            // orphan every subscription and every saved article on the update.
             "light-rss.db",
             RssDatabase.MIGRATION_1_2,
             RssDatabase.MIGRATION_2_3,
+            RssDatabase.MIGRATION_3_4,
         )
         val repository = RssRepository(
             dao = database.rssDao(),
@@ -67,18 +78,151 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
     @Composable
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
+        val rssUnread by viewModel.rssUnread.collectAsState()
+        val newsletterUnread by viewModel.newsletterUnread.collectAsState()
+        val feedCount by viewModel.feedCount.collectAsState()
+        val labelCount by viewModel.labelCount.collectAsState()
+        val sync by viewModel.syncState.collectAsState()
+        val repository = viewModel.repository
+
+        WheelKeys()
+        LightTheme(colors = colors) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(LightThemeTokens.colors.background),
+            ) {
+                LightTopBar(
+                    leftButton = LightBarButton.LightIcon(
+                        icon = LightIcons.SETTINGS,
+                        onClick = { navigateTo({ SettingsScreen(it, repository) }) },
+                    ),
+                    center = LightTopBarCenter.Text("News"),
+                    rightButton = LightBarButton.LightIcon(
+                        icon = LightIcons.SEARCH,
+                        onClick = { navigateTo({ SearchScreen(it, repository) }) },
+                        contentDescription = "Search everything",
+                    ),
+                )
+                StatusLine(
+                    when {
+                        sync.isRefreshing -> "SYNC ${sync.completedFeeds}/${sync.totalFeeds}"
+                        sync.message?.contains("could not", ignoreCase = true) == true -> sync.message
+                        else -> null
+                    },
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    SectionRow(
+                        title = "RSS",
+                        unread = rssUnread,
+                        detail = when (feedCount) {
+                            0 -> "No feeds yet"
+                            1 -> "1 feed"
+                            else -> "$feedCount feeds"
+                        },
+                    ) {
+                        navigateTo({ SectionScreen(it, Source.RSS, repository) })
+                    }
+                    SectionRow(
+                        title = "NEWSLETTERS",
+                        unread = newsletterUnread,
+                        detail = when (labelCount) {
+                            0 -> "Not set up — open to connect Gmail"
+                            1 -> "1 label"
+                            else -> "$labelCount labels"
+                        },
+                    ) {
+                        navigateTo({ SectionScreen(it, Source.GMAIL, repository) })
+                    }
+                }
+                LightBottomBar(
+                    items = listOf(
+                        LightBarButton.LightIcon(
+                            icon = LightIcons.STAR_OUTLINE,
+                            onClick = { navigateTo({ SavedScreen(it, repository) }) },
+                            contentDescription = "Saved",
+                        ),
+                        LightBarButton.LightIcon(
+                            icon = LightIcons.REFRESH,
+                            onClick = viewModel::refresh,
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A section on the home screen.
+ *
+ * Taller than a settings row and headed in [LightTextVariant.Subheading], because these two are
+ * the app's top-level choice rather than an option inside it. The unread count is part of the
+ * detail line rather than a badge: the panel is monochrome, so a badge is just a smaller number
+ * in a harder place to read.
+ */
+@Composable
+private fun SectionRow(
+    title: String,
+    unread: Int,
+    detail: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .lightClickable(onClickLabel = title, role = Role.Button) { onClick() }
+            .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 1.25f.gridUnitsAsDp()),
+    ) {
+        LightText(title, LightTextVariant.Subheading, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        LightText(
+            text = listOf(
+                when (unread) {
+                    0 -> "All read"
+                    1 -> "1 unread"
+                    else -> "$unread unread"
+                },
+                detail,
+            ).joinToString(" · "),
+            variant = LightTextVariant.Superfine,
+            lighten = true,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 0.4f.gridUnitsAsDp()),
+        )
+    }
+}
+
+/**
+ * One section's articles: the list this app used to open straight into, now scoped to a source.
+ *
+ * Both sections are this screen. The differences are two words in the top bar and where the
+ * list button goes — Subscriptions for feeds, Mailbox for labels — because past the source
+ * filter there is nothing about a newsletter that a list of articles needs to know.
+ */
+class SectionScreen(
+    sealedActivity: SealedLightActivity,
+    private val source: String,
+    private val repository: RssRepository,
+) : LightScreen<Unit, SectionViewModel>(sealedActivity) {
+    override val viewModelClass: Class<SectionViewModel> = SectionViewModel::class.java
+    override fun createViewModel() = SectionViewModel(source, repository)
+
+    @Composable
+    override fun Content() {
+        val colors by LightThemeController.colors.collectAsState()
         val articles by viewModel.articles.collectAsState()
         val unreadOnly by viewModel.unreadOnly.collectAsState()
         val favoritesOnly by viewModel.favoritesOnly.collectAsState()
         val favoriteCount by viewModel.favoriteFeedCount.collectAsState()
         val sync by viewModel.syncState.collectAsState()
         val jumpToNewest by viewModel.jumpToNewest.collectAsState()
-        val repository = viewModel.repository
         val imageStore = rememberImageStore(repository)
         val listState = rememberLazyListState()
+        val newsletters = source == Source.GMAIL
 
-        // Opening the app lands on the newest article, even when a sync has just slipped fresh
-        // items in above where the list was left.
+        // Opening the section lands on the newest item, even when a sync has just slipped fresh
+        // ones in above where the list was left.
         LaunchedEffect(jumpToNewest) {
             if (jumpToNewest > 0) listState.scrollToItem(0)
         }
@@ -92,15 +236,24 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             ) {
                 key(unreadOnly, favoritesOnly) {
                     LightTopBar(
-                        leftButton = LightBarButton.LightIcon(
-                            icon = LightIcons.LIST,
-                            onClick = { navigateTo({ FeedsScreen(it, repository) }) },
-                            contentDescription = "Subscriptions",
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text(
+                            when {
+                                newsletters -> "Newsletters"
+                                favoritesOnly -> "Favorites"
+                                else -> "RSS"
+                            },
                         ),
-                        center = LightTopBarCenter.Text(if (favoritesOnly) "Favorites" else "RSS"),
                         rightButton = LightBarButton.LightIcon(
-                            icon = LightIcons.SEARCH,
-                            onClick = { navigateTo({ SearchScreen(it, repository) }) },
+                            icon = LightIcons.LIST,
+                            onClick = {
+                                if (newsletters) {
+                                    navigateTo({ MailboxScreen(it, repository) })
+                                } else {
+                                    navigateTo({ FeedsScreen(it, repository) })
+                                }
+                            },
+                            contentDescription = if (newsletters) "Mailbox" else "Subscriptions",
                         ),
                     )
                 }
@@ -113,16 +266,10 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                 )
                 ArticleList(
                     articles = articles,
-                    emptyMessage = when {
-                        favoritesOnly && favoriteCount == 0 ->
-                            "No favorite feeds yet.\n\nStar a feed in Subscriptions, or switch home back to all feeds."
-                        favoritesOnly && unreadOnly ->
-                            "You’re all caught up on your favorites.\n\nSwitch the filter to revisit the archive."
-                        unreadOnly ->
-                            "You’re all caught up.\n\nSwitch the filter to revisit the archive."
-                        else -> "No articles yet.\n\nRefresh or add a subscription."
+                    emptyMessage = emptyMessage(newsletters, unreadOnly, favoritesOnly, favoriteCount),
+                    onOpen = { row ->
+                        navigateTo({ articleReader(it, row.article.id, repository) })
                     },
-                    onOpen = { row -> navigateTo({ ReaderScreen(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
                     imageStore = imageStore,
                     listState = listState,
@@ -142,7 +289,44 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             }
         }
     }
+
+    private fun emptyMessage(
+        newsletters: Boolean,
+        unreadOnly: Boolean,
+        favoritesOnly: Boolean,
+        favoriteCount: Int,
+    ): String = when {
+        newsletters && unreadOnly ->
+            "Nothing unread.\n\nFollow a Gmail label from the list button, or switch the " +
+                "filter to revisit past issues."
+        newsletters ->
+            "No newsletters yet.\n\nOpen the list button to connect Gmail and follow a label."
+        favoritesOnly && favoriteCount == 0 ->
+            "No favorite feeds yet.\n\nStar a feed in Subscriptions, or switch back to all feeds."
+        favoritesOnly && unreadOnly ->
+            "You’re all caught up on your favorites.\n\nSwitch the filter to revisit the archive."
+        unreadOnly ->
+            "You’re all caught up.\n\nSwitch the filter to revisit the archive."
+        else -> "No articles yet.\n\nRefresh or add a subscription."
+    }
 }
+
+/**
+ * The right reader for an article.
+ *
+ * Decided from the id rather than by branching at every call site: five screens open articles,
+ * and each of them would otherwise have to know that newsletters exist.
+ */
+internal fun articleReader(
+    activity: SealedLightActivity,
+    articleId: String,
+    repository: RssRepository,
+): SimpleLightScreen<Unit> =
+    if (NewsletterSync.isNewsletter(articleId)) {
+        NewsletterReaderScreen(activity, articleId, repository)
+    } else {
+        ReaderScreen(activity, articleId, repository)
+    }
 
 /** The image store to render with, or null while images are switched off in Settings. */
 @Composable
@@ -441,7 +625,7 @@ class FeedScreen(
                 ArticleList(
                     articles = articles,
                     emptyMessage = "No articles are available from this feed.",
-                    onOpen = { row -> navigateTo({ ReaderScreen(it, row.article.id, repository) }) },
+                    onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
                     imageStore = imageStore,
                 )
@@ -542,7 +726,7 @@ class SavedScreen(
                 ArticleList(
                     articles = articles,
                     emptyMessage = "No saved articles.\n\nUse the star while reading to keep something.",
-                    onOpen = { row -> navigateTo({ ReaderScreen(it, row.article.id, repository) }) },
+                    onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
                     imageStore = imageStore,
                 )
@@ -608,7 +792,7 @@ class SearchScreen(
                     ArticleList(
                         articles = results,
                         emptyMessage = "No matching articles.",
-                        onOpen = { row -> navigateTo({ ReaderScreen(it, row.article.id, repository) }) },
+                        onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                         modifier = Modifier.weight(1f),
                         imageStore = imageStore,
                     )
@@ -872,6 +1056,12 @@ class SettingsScreen(
                     SettingsRow("APPEARANCE", "Toggle light / dark") {
                         LightThemeController.toggle()
                     }
+                    SettingsRow("SUBSCRIPTIONS", "Feeds you follow") {
+                        navigateTo({ FeedsScreen(it, repository) })
+                    }
+                    SettingsRow("MAILBOX", "Gmail account, labels and newsletter rendering") {
+                        navigateTo({ MailboxScreen(it, repository) })
+                    }
                     SettingsRow(
                         title = if (imagesEnabled) "IMAGES ON" else "IMAGES OFF",
                         detail = if (imagesEnabled) {
@@ -910,7 +1100,9 @@ class SettingsScreen(
                     Column(modifier = Modifier.padding(1f.gridUnitsAsDp())) {
                         LightText("ABOUT", LightTextVariant.Superfine, lighten = true)
                         LightText(
-                            text = "Offline RSS and Atom reading with feed images. No app ads. No WebView.",
+                            text = "Offline RSS, Atom and Gmail newsletters in one list. No app " +
+                                "ads. The RSS reader uses no WebView at all; newsletters use one, " +
+                                "with scripts off.",
                             variant = LightTextVariant.Detail,
                             modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
                         )
@@ -926,7 +1118,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 1.12.0",
+                            text = "VERSION 2.0.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
@@ -938,7 +1130,7 @@ class SettingsScreen(
     }
 }
 
-private class ConfirmationScreen(
+internal class ConfirmationScreen(
     sealedActivity: SealedLightActivity,
     private val message: String,
     private val confirmLabel: String,
@@ -957,7 +1149,7 @@ private class ConfirmationScreen(
     }
 }
 
-private class MessageScreen(
+internal class MessageScreen(
     sealedActivity: SealedLightActivity,
     private val message: String,
 ) : SimpleLightScreen<Unit>(sealedActivity) {
@@ -971,7 +1163,7 @@ private class MessageScreen(
 }
 
 @Composable
-private fun SettingsRow(title: String, detail: String, onClick: () -> Unit) {
+internal fun SettingsRow(title: String, detail: String, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -989,7 +1181,7 @@ private fun SettingsRow(title: String, detail: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun LoadingScreen(message: String, modifier: Modifier = Modifier) {
+internal fun LoadingScreen(message: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxSize()

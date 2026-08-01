@@ -13,6 +13,9 @@ work = "2.10.0"
 [libraries]
 unifiedpush-connector = { module = "org.unifiedpush.android:connector", version.ref = "connector" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+# Newsletter HTML only. The RSS reader parses feeds and article pages without a DOM on purpose
+# (see RssParser and ReaderExtractor); an email is a nest of layout tables that needs a real one.
+jsoup = { module = "org.jsoup:jsoup", version = "1.21.2" }
 
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 compose-ui = { module = "androidx.compose.ui:ui" }

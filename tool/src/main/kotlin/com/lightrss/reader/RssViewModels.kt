@@ -13,40 +13,37 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+/**
+ * The two sections, and the counts beside them.
+ *
+ * Home is a chooser rather than a list because the two sources read differently — an RSS item is
+ * a headline you skim past, a newsletter is a thing you sat down for — and merging them into one
+ * timeline buries the second under the first on any day with a busy feed. The counts are what
+ * make the extra tap worth it: you can see whether there is anything in either without opening
+ * one.
+ */
 class HomeViewModel(
     val repository: RssRepository,
     private val database: RssDatabase,
 ) : LightViewModel<Unit>() {
-    private val _unreadOnly = MutableStateFlow(true)
-    val unreadOnly: StateFlow<Boolean> = _unreadOnly.asStateFlow()
 
-    /** Whether home is narrowed to favourite feeds. Chosen in Subscriptions, stored in the database. */
-    val favoritesOnly: StateFlow<Boolean> = repository.homeFavoritesOnly
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    val favoriteFeedCount: StateFlow<Int> = repository.observeFavoriteFeedCount()
+    val rssUnread: StateFlow<Int> = repository.observeUnreadCount(Source.RSS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-
-    val articles: StateFlow<List<ArticleRow>> = combine(_unreadOnly, favoritesOnly, ::Pair)
-        .flatMapLatest { (unreadOnly, favoritesOnly) ->
-            repository.observeInbox(unreadOnly, favoritesOnly)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val newsletterUnread: StateFlow<Int> = repository.observeUnreadCount(Source.GMAIL)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val feedCount: StateFlow<Int> = repository.observeFeeds(Source.RSS)
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val labelCount: StateFlow<Int> = repository.observeFeeds(Source.GMAIL)
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     val syncState: StateFlow<SyncState> = repository.syncState
-
-    /**
-     * Bumped whenever the list should go back to the newest article: the first time the screen is
-     * shown, and again after the app has been away in the background. Coming back from the reader
-     * does not bump it, so a half-read list keeps its place.
-     */
-    private val _jumpToNewest = MutableStateFlow(0)
-    val jumpToNewest: StateFlow<Int> = _jumpToNewest.asStateFlow()
-    private var jumpPending = true
 
     private var initialized = false
 
@@ -60,12 +57,74 @@ class HomeViewModel(
 
     override fun onScreenShow(screen: SimpleLightScreen<Unit>) {
         super.onScreenShow(screen)
+        if (initialized) {
+            viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = false) }
+        }
+    }
+
+    fun refresh() {
+        viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = true) }
+    }
+
+    /**
+     * Home owns the repository and the database because it is the one screen guaranteed to
+     * outlive every other — closing them anywhere else would pull the connection out from under
+     * a section still on the stack.
+     */
+    override fun onCleared() {
+        repository.close()
+        database.close()
+        super.onCleared()
+    }
+}
+
+/** One section's article list. [source] is [Source.RSS] or [Source.GMAIL]. */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+class SectionViewModel(
+    private val source: String,
+    val repository: RssRepository,
+) : LightViewModel<Unit>() {
+    private val _unreadOnly = MutableStateFlow(true)
+    val unreadOnly: StateFlow<Boolean> = _unreadOnly.asStateFlow()
+
+    /**
+     * Whether the list is narrowed to favourite feeds. Chosen in Subscriptions, stored in the
+     * database, and only meaningful for RSS — a mailbox has no favourites, so the newsletters
+     * section pins it off rather than showing a filter that does nothing.
+     */
+    val favoritesOnly: StateFlow<Boolean> =
+        if (source == Source.RSS) {
+            repository.homeFavoritesOnly
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        } else {
+            MutableStateFlow(false).asStateFlow()
+        }
+
+    val favoriteFeedCount: StateFlow<Int> = repository.observeFavoriteFeedCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val articles: StateFlow<List<ArticleRow>> = combine(_unreadOnly, favoritesOnly, ::Pair)
+        .flatMapLatest { (unreadOnly, favoritesOnly) ->
+            repository.observeInbox(unreadOnly, favoritesOnly, source)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val syncState: StateFlow<SyncState> = repository.syncState
+
+    /**
+     * Bumped whenever the list should go back to the newest article: the first time the screen
+     * is shown, and again after the app has been away in the background. Coming back from the
+     * reader does not bump it, so a half-read list keeps its place.
+     */
+    private val _jumpToNewest = MutableStateFlow(0)
+    val jumpToNewest: StateFlow<Int> = _jumpToNewest.asStateFlow()
+    private var jumpPending = true
+
+    override fun onScreenShow(screen: SimpleLightScreen<Unit>) {
+        super.onScreenShow(screen)
         if (jumpPending) {
             jumpPending = false
             _jumpToNewest.update { it + 1 }
-        }
-        if (initialized) {
-            viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = false) }
         }
     }
 
@@ -79,16 +138,10 @@ class HomeViewModel(
     fun refresh() {
         viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = true) }
     }
-
-    override fun onCleared() {
-        repository.close()
-        database.close()
-        super.onCleared()
-    }
 }
 
 class FeedsViewModel(private val repository: RssRepository) : LightViewModel<Unit>() {
-    val feeds: StateFlow<List<FeedRow>> = repository.observeFeeds()
+    val feeds: StateFlow<List<FeedRow>> = repository.observeFeeds(Source.RSS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** The home scope, shown and flipped from the row above the subscription list. */
@@ -109,8 +162,11 @@ data class AddFeedUiState(
     val error: String? = null,
 )
 
-/** No-state viewmodel for screens that only route, such as the add-feed chooser. */
+/** No-state viewmodel for screens that only route and return a new feed's id. */
 class ChooserViewModel : LightViewModel<Long>()
+
+/** The same, for a menu that returns nothing. */
+class MenuViewModel : LightViewModel<Unit>()
 
 class AddFeedViewModel(private val repository: RssRepository) : LightViewModel<Long>() {
     private val _state = MutableStateFlow(AddFeedUiState())

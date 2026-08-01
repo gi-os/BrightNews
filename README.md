@@ -1,17 +1,77 @@
-# LightRSS
+# News
 
-RSS and Atom reader for the Light Phone III, built on the Light SDK. Tool id
-`com.lightrss.reader`. Feeds, read state, saved articles, images and search stay on the
-phone. Current release: **v1.12.0** (`tool/lighttool.toml`: versionCode 16).
+Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,
+Gmail newsletters in the other, both read in the same reader. Built on the Light SDK; tool
+id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and search stay on
+the phone. Current release: **v2.0.0** (`tool/lighttool.toml`: versionCode 17).
 
-This is a fork of **[zachattack323/LightRSS](https://github.com/zachattack323/LightRSS)**,
-itself built on `lightphone/light-sdk`'s tool scaffold. This fork adds article/list
-images, subscribing by QR code instead of typing a URL on the phone keyboard, an
-in-app reader for the page an article links to (with session-carrying sign-in for sites
-that gate content), and hardware-wheel scrolling. Work happens on the
+Formerly **LightRSS**, and before that a fork of
+**[zachattack323/LightRSS](https://github.com/zachattack323/LightRSS)** on
+`lightphone/light-sdk`'s tool scaffold. This fork added article/list images, subscribing by
+QR code instead of typing a URL on the phone keyboard, an in-app reader for the page an
+article links to (with session-carrying sign-in for sites that gate content), and
+hardware-wheel scrolling. **v2.0.0 absorbed [LightNews](https://github.com/gi-os/LightNews)**,
+which was a separate newsletter app; that repo is retired. Work happens on the
 `images-and-qr` branch, **which is this repo's default branch** — see
-[Branches and CI](#branches-and-ci-read-this-before-you-push), because the trigger
-layout here does not match the rest of the portfolio.
+[Branches and CI](#branches-and-ci-read-this-before-you-push), because the trigger layout
+here does not match the rest of the portfolio.
+
+> ### The merge, in one paragraph
+>
+> **A Gmail label is a feed.** A subscribed label is a `FeedEntity` with `sourceType =
+> "GMAIL"`, and each of its messages is an `ArticleEntity` like any other. That is the whole
+> design: the home list, search, saved items, read state, the article cache and the trim
+> policy are the ones that were already there, and the second source cost a sync
+> (`NewsletterSync`) and a renderer (`NewsletterHtml`) rather than a second app. Only
+> `RssRepository.refreshFeedInternal` branches on where an article came from.
+>
+> Three things changed shape on the way in, and each is worth knowing about:
+>
+> - **Sign-in moved into the app.** LightNews opened Google's consent page in the system
+>   browser and waited for a custom-scheme redirect through an intent filter on its
+>   `MainActivity`. A Light SDK tool ships no manifest and owns no activity, so there is
+>   nothing for the OS to hand a redirect back to. `GmailSignInScreen` loads the consent page
+>   in a WebView the tool owns and catches the redirect in `shouldOverrideUrlLoading` before
+>   it is ever fetched — so it needs no browser, no intent filter and no resolvable address,
+>   and the authorization code never leaves the process. This removes the single largest
+>   unknown in LightNews's release notes.
+> - **Newsletter bodies became a table.** LightNews wrote them to `filesDir`, which cost it a
+>   staging-write dance, an orphan sweep and a `hasBody` check on every sync.
+>   `newsletter_bodies` is a child table with `ON DELETE CASCADE`: the body cannot outlive its
+>   article and cannot go missing while the row survives, and all three mechanisms are gone.
+> - **Background sync went away.** LightNews polled hourly through WorkManager. Newsletters
+>   now refresh with everything else, when you open the app or pull the refresh button, which
+>   is what the RSS side always did.
+>
+> Read state still round-trips to Gmail. Opening an issue clears `UNREAD` on the server, and
+> `ArticleEntity.pendingRead` is what makes that honest offline — the flag flips locally
+> first, the push happens on the next sync, and a row carrying an unpushed read is excluded
+> from both directions of reconciliation so a stale server answer cannot erase it.
+
+## Newsletters: setting it up
+
+Nothing outside a label you explicitly follow is ever read. The app asks for `gmail.modify`,
+which is a restricted scope, because clearing `UNREAD` is a write — point it at an account
+you don't mind it touching first.
+
+1. In Gmail, filter your newsletters into a label. `LightNewsletter` is a reasonable name.
+2. In Google Cloud, create a **Desktop app** OAuth client, enable the Gmail API, and add your
+   address as a test user. Consent screens still in Testing expire their grants after seven
+   days; the app treats `invalid_grant` as "ask for consent again" rather than retrying.
+3. On the phone: **News → Newsletters → list button → Add client ID.** Type it, paste it, or
+   scan it as a QR code off another screen.
+4. **Sign in**, then **+** to pick the label.
+
+Or skip the phone entirely: run `scripts/authorize.py` on a computer, and scan the QR code it
+prints. That carries a refresh token straight in and never opens a consent screen on the
+device.
+
+Two render modes, one keypress apart in the reader. **DARK** forces white-on-black and
+unwraps the layout tables so the copy reflows to the panel — the better read, but it hides
+dark logos drawn on transparent backgrounds. **PAPER** keeps the newsletter's own design and
+only fixes the width, which is what brand-heavy issues want; a matte monochrome panel is the
+closest thing to the white paper these were designed for. Sponsor blocks are cut by default
+and a marker is left where each one was, so a wrong guess is visible rather than silent.
 
 ## Quick start
 
@@ -161,6 +221,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v2.0.0  | —        | Renamed to News. Absorbed LightNews: Gmail labels are feeds, newsletters read in the app's own reader, sign-in moved into an in-app WebView, bodies moved from files to a cascading table, hourly WorkManager polling dropped |
 | v1.12.0 | `c472d9e` | Scroll with the brightness wheel |
 | v1.11.1 | `b3c3ec3` | Put the article actions at the end of the text, not in a fixed bar |
 | v1.11.0 | `76ecc8a` | Release 1.11.0 — includes `ab2a0fc`, open on the newest article and let home follow only favourite feeds (the keyed-list fix above) |
