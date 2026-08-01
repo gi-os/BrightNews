@@ -138,8 +138,13 @@ class NewsletterHtmlTest {
 
         val out = NewsletterHtml.rewrite(html, RenderMode.DARK, loadImages = false)
 
+        // Assert on the elements and their sources, not on the words: the stylesheet this pass
+        // injects mentions img, video and iframe by name in its own rules, so a bare substring
+        // check finds them whether or not anything was removed.
+        assertFalse("<iframe" in out)
+        assertFalse("<img" in out)
         assertFalse("a.jpg" in out)
-        assertFalse("iframe" in out)
+        assertFalse("v.example" in out)
         assertContains(out, "Text")
     }
 
