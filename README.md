@@ -55,9 +55,12 @@ which is a restricted scope, because clearing `UNREAD` is a write — point it a
 you don't mind it touching first.
 
 1. In Gmail, filter your newsletters into a label. `LightNewsletter` is a reasonable name.
-2. In Google Cloud, create a **Desktop app** OAuth client, enable the Gmail API, and add your
-   address as a test user. Consent screens still in Testing expire their grants after seven
-   days; the app treats `invalid_grant` as "ask for consent again" rather than retrying.
+2. In Google Cloud, create a **Desktop app** OAuth client and enable the Gmail API. Leaving
+   the consent screen in *Testing* expires every grant after seven days — publish it to
+   *In production* instead and they last until revoked. It stays unverified either way, so
+   expect a warning to click past and a lifetime cap on how many accounts may grant it;
+   neither matters for a mailbox of one. The app treats `invalid_grant` as "ask for consent
+   again" rather than retrying forever.
 3. On the phone: **News → Newsletters → list button → Add client ID.** Type it, paste it, or
    scan it as a QR code off another screen.
 4. **Sign in**, then **+** to pick the label.

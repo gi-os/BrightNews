@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Sign LightNews in from a computer, when the phone can't.
+Sign the newsletters section in from a computer, when the phone can't.
 
 The Light Phone III browser is not a browser as far as most OAuth libraries are
 concerned, and consent has to happen in one. So do it here instead: this runs the whole
 authorization-code flow against a loopback redirect, exchanges the code for a refresh
-token, and draws a QR carrying the result. Scan it in Newsletters -> Settings ->
-Client ID -> SCAN QR and the app is signed in without ever opening a page.
+token, and draws a QR carrying the result. Scan it in News -> Newsletters -> the list
+button -> Add client ID -> Scan QR code, and the app is signed in without ever opening a
+page on the phone.
 
 The refresh token in that QR grants read and write access to the mailbox until revoked.
 Treat the code on screen the way you'd treat a password: don't photograph it, don't leave
