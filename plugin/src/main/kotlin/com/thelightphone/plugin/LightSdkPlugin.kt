@@ -39,6 +39,13 @@ class LightSdkPlugin : Plugin<Project> {
             // from treating the camera and barcode stack as unreachable in release builds.
             "androidx.camera",
             "com.google.mlkit",
+            // Declared by News for the newsletters section. An email is a nest of layout tables
+            // built for a desktop mail client, and rewriting one for this panel needs a real DOM
+            // — the RSS side's hand-rolled, DOM-free parsing (RssParser, ReaderExtractor) has
+            // nothing to offer it. jsoup is the narrowest thing that does the job: pure JVM, no
+            // Android surface, no network, no reflection, and nothing this policy exists to
+            // prevent. It is the only entry here that is not already inside the APK.
+            "org.jsoup:jsoup",
         )
 
         val ALLOWED_PLUGINS = setOf(

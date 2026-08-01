@@ -1,10 +1,7 @@
 package com.lightrss.reader
 
 import android.annotation.SuppressLint
-import android.content.Context
-import android.content.Intent
 import android.graphics.Color as AndroidColor
-import android.net.Uri
 import android.view.MotionEvent
 import android.view.View
 import android.webkit.CookieManager
@@ -64,36 +61,45 @@ import com.thelightphone.sdk.ui.lightClickable
  * rather than returning null. Probe once and keep a plain-text path behind it, so a LightOS
  * update can degrade the newsletters section instead of breaking it. Nothing on the RSS side
  * touches this — that reader has no browser in it at all.
+ *
+ * The caller supplies the constructor rather than a Context, because the SDK's build policy
+ * blocks importing `android.content.Context` in tool code and there is no way to name the type
+ * in a signature. `LocalContext.current` is permitted, so the call site has the value; it just
+ * cannot say what it is.
  */
 object WebViewSupport {
     @Volatile
     private var cached: Boolean? = null
 
-    fun isAvailable(context: Context): Boolean = cached ?: synchronized(this) {
+    fun probe(newWebView: () -> WebView): Boolean = cached ?: synchronized(this) {
         cached ?: runCatching {
-            WebView(context).also { it.destroy() }
+            newWebView().also { it.destroy() }
             true
         }.getOrDefault(false).also { cached = it }
     }
 }
 
 /**
- * A WebView that owns every gesture inside it.
+ * Let the WebView own every gesture inside it.
  *
  * `requestDisallowInterceptTouchEvent(true)` fires on ACTION_DOWN, before anything above can
  * claim the gesture. There is no nested-scroll contract between a View and a Compose scrollable
  * to negotiate this properly, and letting Compose arbitrate meant a fling that started a few
  * degrees off vertical got taken away mid-flight.
+ *
+ * A touch listener rather than a `WebView` subclass, which is what this was: a subclass has to
+ * name `android.content.Context` in its constructor, and the SDK's build policy blocks importing
+ * that type. The listener runs ahead of `onTouchEvent` anyway, so nothing is lost — and always
+ * returns false, so the WebView still scrolls itself.
  */
-private class ReaderWebView(context: Context) : WebView(context) {
-    @SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(event: MotionEvent): Boolean {
+private fun WebView.claimGestures() {
+    setOnTouchListener { _, event ->
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> parent?.requestDisallowInterceptTouchEvent(true)
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
                 parent?.requestDisallowInterceptTouchEvent(false)
         }
-        return super.onTouchEvent(event)
+        false
     }
 }
 
@@ -110,15 +116,19 @@ private class ReaderWebView(context: Context) : WebView(context) {
  * document mixed content, whose handling WebView documents as varying by release. An http base
  * takes mixed content out of the picture, and nothing is ever fetched from the base itself.
  */
-@SuppressLint("SetJavaScriptEnabled")
+@SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
 @Composable
 private fun NewsletterWebView(
     document: String,
     mode: RenderMode,
     loadImages: Boolean,
+    onLink: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var webRef by remember { mutableStateOf<WebView?>(null) }
+    // Held in a ref so the WebViewClient always reaches the current lambda rather than the one
+    // captured when the view was created.
+    val link = rememberUpdatedState(onLink)
     // Chromium has no idea what WHEEL_CW is, and there is no nested-scroll bridge from a View to
     // Compose, so the wheel is applied by hand to the WebView that is actually on screen.
     WheelScroll(webRef)
@@ -126,7 +136,8 @@ private fun NewsletterWebView(
     AndroidView(
         modifier = modifier,
         factory = { context ->
-            ReaderWebView(context).apply {
+            WebView(context).apply {
+                claimGestures()
                 settings.apply {
                     // Newsletters are documents. No newsletter needs a script, and off is both
                     // faster and one fewer way for an email to do something clever.
@@ -147,7 +158,14 @@ private fun NewsletterWebView(
                 overScrollMode = View.OVER_SCROLL_NEVER
                 setBackgroundColor(backgroundFor(mode))
                 webViewClient = object : WebViewClient() {
-                    /** Every tap leaves the app; nothing is browsed inside the reader. */
+                    /**
+                     * Nothing is ever browsed inside this view. A tapped link goes to the app's
+                     * own reader — the same one the RSS side uses, which fetches the page and
+                     * renders it with Light typography and no scripts. LightNews handed these to
+                     * the system browser with an ACTION_VIEW intent; the SDK's build policy
+                     * blocks `startActivity` and says to navigate instead, and navigating is the
+                     * better answer anyway on a phone whose browser you are trying to avoid.
+                     */
                     override fun shouldOverrideUrlLoading(
                         view: WebView,
                         request: WebResourceRequest,
@@ -161,7 +179,11 @@ private fun NewsletterWebView(
                             // DNS error page and there is no reload button here, so swallow it.
                             return true
                         }
-                        openExternally(context, request.url)
+                        if (url.startsWith("http://") || url.startsWith("https://")) {
+                            link.value(url)
+                        }
+                        // mailto:, tel: and the rest have nowhere to go here, and are dropped
+                        // rather than handed to a WebView that would show an error page.
                         return true
                     }
                 }
@@ -193,12 +215,6 @@ private fun backgroundFor(mode: RenderMode) =
 
 private const val NEWSLETTER_BASE = "http://newsletter.invalid/"
 
-private fun openExternally(context: Context, uri: Uri) {
-    runCatching {
-        context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-}
-
 /**
  * Reading one newsletter.
  *
@@ -228,7 +244,7 @@ class NewsletterReaderScreen(
         val scroll = rememberScrollState()
 
         LaunchedEffect(context) {
-            viewModel.setWebViewAvailable(WebViewSupport.isAvailable(context))
+            viewModel.setWebViewAvailable(WebViewSupport.probe { WebView(context) })
         }
 
         WheelKeys()
@@ -258,6 +274,21 @@ class NewsletterReaderScreen(
                         document = current.document,
                         mode = mode,
                         loadImages = loadImages,
+                        onLink = { url ->
+                            navigateTo({
+                                ReaderPageScreen(
+                                    it,
+                                    // The reader caches fetched pages under this key, so it has
+                                    // to be the link and not the issue: a newsletter is a page
+                                    // of links, and keying them all on the issue would serve
+                                    // whichever one was tapped first for every one after it.
+                                    articleId = url,
+                                    link = url,
+                                    fallbackTitle = article?.title.orEmpty(),
+                                    repository = repository,
+                                )
+                            })
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
