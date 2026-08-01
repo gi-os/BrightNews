@@ -221,7 +221,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
-| v2.0.0  | —        | Renamed to News. Absorbed LightNews: Gmail labels are feeds, newsletters read in the app's own reader, sign-in moved into an in-app WebView, bodies moved from files to a cascading table, hourly WorkManager polling dropped |
+| v2.0.0  | `29e3685` | Renamed to News. Absorbed LightNews: Gmail labels are feeds, newsletters read in the app's own reader, sign-in moved into an in-app WebView, bodies moved from files to a cascading table, hourly WorkManager polling dropped |
 | v1.12.0 | `c472d9e` | Scroll with the brightness wheel |
 | v1.11.1 | `b3c3ec3` | Put the article actions at the end of the text, not in a fixed bar |
 | v1.11.0 | `76ecc8a` | Release 1.11.0 — includes `ab2a0fc`, open on the newest article and let home follow only favourite feeds (the keyed-list fix above) |
