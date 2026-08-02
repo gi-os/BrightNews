@@ -8,6 +8,12 @@ import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,12 +32,16 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.lightrss.reader.gmail.GmailLabel
 import com.lightrss.reader.hw.WheelKeys
@@ -125,12 +135,14 @@ private fun NewsletterWebView(
     mode: RenderMode,
     loadImages: Boolean,
     onLink: (String) -> Unit,
+    onScrolled: (dy: Int, y: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var webRef by remember { mutableStateOf<WebView?>(null) }
-    // Held in a ref so the WebViewClient always reaches the current lambda rather than the one
+    // Held in refs so the listeners always reach the current lambdas rather than the ones
     // captured when the view was created.
     val link = rememberUpdatedState(onLink)
+    val scrolled = rememberUpdatedState(onScrolled)
     // Chromium has no idea what WHEEL_CW is, and there is no nested-scroll bridge from a View to
     // Compose, so the wheel is applied by hand to the WebView that is actually on screen.
     WheelScroll(webRef)
@@ -159,6 +171,9 @@ private fun NewsletterWebView(
                 isHorizontalScrollBarEnabled = false
                 overScrollMode = View.OVER_SCROLL_NEVER
                 setBackgroundColor(backgroundFor(mode))
+                // Chromium owns this scroller, so the bars have to be told about it from here.
+                // Fires for the wheel too, since that reaches the document through scrollBy.
+                setOnScrollChangeListener { _, _, y, _, oldY -> scrolled.value(y - oldY, y) }
                 webViewClient = object : WebViewClient() {
                     /**
                      * Nothing is ever browsed inside this view. A tapped link goes to the app's
@@ -218,6 +233,91 @@ private fun backgroundFor(mode: RenderMode) =
 private const val NEWSLETTER_BASE = "http://newsletter.invalid/"
 
 /**
+ * Whether the reader's bars are showing.
+ *
+ * Together they are seven grid units of a twelve-unit-tall panel's worth of chrome — a fifth of
+ * the screen, held permanently, on the one screen in the app whose whole job is to show as much
+ * of a document as it can. So they go away while you are reading forwards and come back the
+ * moment you are not.
+ *
+ * Two rules keep that from becoming a trap, and both matter more than the hiding does. The bars
+ * always return near the top, and they return on any deliberate scroll back up — because the
+ * back button lives in the top bar, and a reader who has to guess how to reach it has been given
+ * a worse screen, not a bigger one. The upward threshold is deliberately less than half the
+ * downward one for the same reason: easy to recover, harder to lose.
+ *
+ * Travel is accumulated rather than acted on per event. A WebView emits a scroll callback per
+ * frame of a fling, and a single pixel of jitter at the end of one would otherwise flip the bars
+ * back and forth. A reversal resets the count, so the gesture that counts is the one in progress.
+ */
+@Stable
+private class ChromeVisibility(
+    private val nearTopPx: Int,
+    private val hideAfterPx: Int,
+    private val showAfterPx: Int,
+) {
+    var visible by mutableStateOf(true)
+        private set
+
+    private var travel = 0
+
+    fun onScrolled(dy: Int, y: Int) {
+        if (y <= nearTopPx) {
+            travel = 0
+            visible = true
+            return
+        }
+        travel = if (travel != 0 && (travel > 0) == (dy > 0)) travel + dy else dy
+        when {
+            travel > hideAfterPx -> {
+                visible = false
+                travel = 0
+            }
+            travel < -showAfterPx -> {
+                visible = true
+                travel = 0
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberChromeVisibility(): ChromeVisibility {
+    val density = LocalDensity.current
+    return remember(density) {
+        with(density) {
+            ChromeVisibility(
+                nearTopPx = 24.dp.roundToPx(),
+                hideAfterPx = 56.dp.roundToPx(),
+                showAfterPx = 20.dp.roundToPx(),
+            )
+        }
+    }
+}
+
+/**
+ * The bars, sliding out of the layout rather than floating over it.
+ *
+ * Light's bars are opaque, so overlaying them would put a solid block across the copy whenever
+ * they were up. Taking them out of the Column instead gives the document the space for real —
+ * which is the point — at the cost of a reflow, which the short slide covers.
+ */
+@Composable
+private fun ReaderChrome(visible: Boolean, content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandVertically(animationSpec = tween(CHROME_MS)) +
+            fadeIn(animationSpec = tween(CHROME_MS)),
+        exit = shrinkVertically(animationSpec = tween(CHROME_MS)) +
+            fadeOut(animationSpec = tween(CHROME_MS)),
+    ) {
+        content()
+    }
+}
+
+private const val CHROME_MS = 120
+
+/**
  * Reading one newsletter.
  *
  * A separate screen from [ReaderScreen] because the content is a different kind of thing, not
@@ -244,9 +344,20 @@ class NewsletterReaderScreen(
         val article = row?.article
         val context = LocalContext.current
         val scroll = rememberScrollState()
+        val chrome = rememberChromeVisibility()
 
         LaunchedEffect(context) {
             viewModel.setWebViewAvailable(WebViewSupport.probe { WebView(context) })
+        }
+
+        // The plain-text fallback scrolls in Compose rather than in Chromium, so its deltas come
+        // from the scroll state instead of a view listener. Same bars, same rules.
+        LaunchedEffect(scroll) {
+            var last = 0
+            snapshotFlow { scroll.value }.collect { y ->
+                chrome.onScrolled(y - last, y)
+                last = y
+            }
         }
 
         WheelKeys()
@@ -256,19 +367,25 @@ class NewsletterReaderScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                    center = LightTopBarCenter.Text(row?.feedTitle ?: "Newsletter"),
-                    rightButton = LightBarButton.LightIcon(
-                        icon = if (article?.isStarred == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
-                        onClick = viewModel::toggleStar,
-                        contentDescription = if (article?.isStarred == true) {
-                            "Remove from saved"
-                        } else {
-                            "Save newsletter"
-                        },
-                    ),
-                )
+                ReaderChrome(chrome.visible) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text(row?.feedTitle ?: "Newsletter"),
+                        rightButton = LightBarButton.LightIcon(
+                            icon = if (article?.isStarred == true) {
+                                LightIcons.STAR
+                            } else {
+                                LightIcons.STAR_OUTLINE
+                            },
+                            onClick = viewModel::toggleStar,
+                            contentDescription = if (article?.isStarred == true) {
+                                "Remove from saved"
+                            } else {
+                                "Save newsletter"
+                            },
+                        ),
+                    )
+                }
                 when (val current = body) {
                     null -> LoadingScreen("Opening…", Modifier.weight(1f))
 
@@ -291,6 +408,7 @@ class NewsletterReaderScreen(
                                 )
                             })
                         },
+                        onScrolled = chrome::onScrolled,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth(),
@@ -322,23 +440,25 @@ class NewsletterReaderScreen(
                         Modifier.weight(1f),
                     )
                 }
-                LightBottomBar(
-                    items = listOf(
-                        LightBarButton.Text(
-                            text = if (mode == RenderMode.DARK) "DARK" else "PAPER",
-                            onClick = viewModel::toggleMode,
+                ReaderChrome(chrome.visible) {
+                    LightBottomBar(
+                        items = listOf(
+                            LightBarButton.Text(
+                                text = if (mode == RenderMode.DARK) "DARK" else "PAPER",
+                                onClick = viewModel::toggleMode,
+                            ),
+                            LightBarButton.Text(
+                                text = if (article?.isRead == true) "UNREAD" else "READ",
+                                onClick = viewModel::toggleRead,
+                            ),
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.DELETE,
+                                onClick = { viewModel.archive { goBack() } },
+                                contentDescription = "Archive",
+                            ),
                         ),
-                        LightBarButton.Text(
-                            text = if (article?.isRead == true) "UNREAD" else "READ",
-                            onClick = viewModel::toggleRead,
-                        ),
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.DELETE,
-                            onClick = { viewModel.archive { goBack() } },
-                            contentDescription = "Archive",
-                        ),
-                    ),
-                )
+                    )
+                }
             }
         }
     }

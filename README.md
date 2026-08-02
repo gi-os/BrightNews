@@ -3,7 +3,7 @@
 Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,
 Gmail newsletters in the other, both read in the same reader. Built on the Light SDK; tool
 id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and search stay on
-the phone. Current release: **v2.0.1** (`tool/lighttool.toml`: versionCode 18).
+the phone. Current release: **v2.1.0** (`tool/lighttool.toml`: versionCode 19).
 
 Formerly **LightRSS**, and before that a fork of
 **[zachattack323/LightRSS](https://github.com/zachattack323/LightRSS)** on
@@ -70,6 +70,10 @@ you don't mind it touching first.
 Or skip the phone entirely: run `scripts/authorize.py` on a computer, and scan the QR code it
 prints. That carries a refresh token straight in and never opens a consent screen on the
 device.
+
+Reading an issue, the top and bottom bars slide away once you are scrolling forwards — seven
+grid units of a twelve-unit panel, given back to the document. They return near the top of the
+issue and on any deliberate scroll up, which matters because the back button lives up there.
 
 Two render modes, one keypress apart in the reader. **DARK** forces white-on-black and
 unwraps the layout tables so the copy reflows to the panel — the better read, but it hides
@@ -226,6 +230,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v2.1.0  | —         | The newsletter reader's bars get out of the way while you read forwards, and come back on any scroll up |
 | v2.0.1  | —         | A stored OAuth client can be seen, replaced and removed; signing out now takes the cached issues with it |
 | v2.0.0  | `29e3685` | Renamed to News. Absorbed LightNews: Gmail labels are feeds, newsletters read in the app's own reader, sign-in moved into an in-app WebView, bodies moved from files to a cascading table, hourly WorkManager polling dropped |
 | v1.12.0 | `c472d9e` | Scroll with the brightness wheel |
