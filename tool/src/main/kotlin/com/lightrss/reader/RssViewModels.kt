@@ -427,6 +427,13 @@ class SettingsViewModel(private val repository: RssRepository) : LightViewModel<
     val imagesEnabled: StateFlow<Boolean> = repository.imagesEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
+    val colourEnabled: StateFlow<Boolean> = repository.colourEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setColourEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) { repository.setColourEnabled(enabled) }
+    }
+
     fun setImagesEnabled(enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) { repository.setImagesEnabled(enabled) }
     }

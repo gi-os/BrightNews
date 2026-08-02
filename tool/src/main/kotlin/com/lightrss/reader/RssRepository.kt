@@ -287,6 +287,18 @@ class RssRepository(
 
     fun clearImageCache() = images?.clear()
 
+    /**
+     * Whether to hold the phone in colour while an image is on screen. Defaults to on, and does
+     * nothing at all until the adb grant in [ColorMode] has been given.
+     */
+    val colourEnabled: Flow<Boolean> = dao.observeMetadata(COLOUR_KEY)
+        .map { it != "0" }
+        .distinctUntilChanged()
+
+    suspend fun setColourEnabled(enabled: Boolean) {
+        dao.putMetadata(AppMetadataEntity(COLOUR_KEY, if (enabled) "1" else "0"))
+    }
+
     private val readerPages = mutableMapOf<String, ReaderResult>()
     private val readerLock = Mutex()
 
@@ -528,6 +540,7 @@ class RssRepository(
         private const val AGENT_KEY = "site_agent:"
         private const val STARTER_FEEDS_KEY = "starter_feeds_added"
         private const val SHOW_IMAGES_KEY = "show_images"
+        private const val COLOUR_KEY = "lift_greyscale"
         private const val HOME_FAVORITES_KEY = "home_favorites_only"
         private const val AUTO_REFRESH_AGE_MS = 15 * 60 * 1_000L
         private const val MAX_TITLE_LENGTH = 600

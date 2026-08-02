@@ -3,7 +3,7 @@
 Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,
 Gmail newsletters in the other, both read in the same reader. Built on the Light SDK; tool
 id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and search stay on
-the phone. Current release: **v2.2.0** (`tool/lighttool.toml`: versionCode 20).
+the phone. Current release: **v2.3.0** (`tool/lighttool.toml`: versionCode 21).
 
 Formerly **LightRSS**, and before that a fork of
 **[zachattack323/LightRSS](https://github.com/zachattack323/LightRSS)** on
@@ -82,6 +82,34 @@ only fixes the width, which is what brand-heavy issues want; a panel showing bla
 the closest thing to the paper these were designed for. Sponsor blocks are cut by default
 and a marker is left where each one was, so a wrong guess is visible rather than silent.
 
+## Colour
+
+The Light Phone III's panel is a full-colour AMOLED. Its black-and-white look is Android's
+accessibility daltonizer pinned to simulate-monochromacy — a SurfaceFlinger colour matrix over
+everything on screen — and LightOS lifts it itself for photos and video. News does the same while
+a picture is on screen, and puts it straight back when you leave the article or the app.
+
+It needs one grant, once per install, because `WRITE_SECURE_SETTINGS` is
+`signature|privileged|development`:
+
+```sh
+adb shell pm grant com.lightrss.reader android.permission.WRITE_SECURE_SETTINGS
+```
+
+Without it every call quietly does nothing and pictures stay grey — the `SecurityException` is
+swallowed, so the app degrades rather than breaks. **Settings → COLOUR** turns it off if you would
+rather the phone never changed. Colour is only held where there is something to see in it: an
+article with images, an extracted page with images, an HTML newsletter. A text-only article never
+touches the setting.
+
+The mechanism is a straight port of `ColorMode` from [LightCamera](https://github.com/gi-os/LightCamera),
+itself a port of LightChat's — the reference counting and foreground handling are load-bearing and
+were arrived at the hard way. Two things differ because this is an SDK tool rather than an app: the
+`android.content.Context` import and the `contentResolver` access are blocked by the SDK build
+policy and are marked exempt line by line rather than by deleting the rules (`grep -rn
+'light-sdk-allow' tool/src` finds all four), and there is no `Application` to hook, so the
+foreground handling comes off the screen's own lifecycle instead.
+
 ## Quick start
 
 ```sh
@@ -146,7 +174,8 @@ git push origin v1.13.0                        # runs release.yml, publishes the
   [gi-os.github.io/LightRSS](https://gi-os.github.io/LightRSS) generates a matching code
   from any feed or site address, client-side.
 - **Images** (this fork's main addition). A thumbnail per article row and full-width
-  images in the reader, downsampled to the width the panel needs and kept in colour. Pulled from
+  images in the reader, downsampled to the width the panel needs and shown **in colour** — see
+  [Colour](#colour). Pulled from
   `enclosure`, `media:content`, `media:thumbnail`, `itunes:image` and inline `<img>`
   markup; 1x1 tracking beacons, `data:` URIs and known tracking hosts are dropped.
   Lazy, on-screen-row-only downloads into an 8 MB memory cache / 24 MB disk cache. A
@@ -230,6 +259,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v2.3.0  | —         | Pictures show in colour on a phone that stays grey, via the daltonizer and a one-time adb grant |
 | v2.2.0  | —         | Images keep their colour. The app no longer flattens them; the phone's own daltonizer does that, and can be switched off |
 | v2.1.0  | —         | The newsletter reader's bars get out of the way while you read forwards, and come back on any scroll up |
 | v2.0.1  | —         | A stored OAuth client can be seen, replaced and removed; signing out now takes the cached issues with it |

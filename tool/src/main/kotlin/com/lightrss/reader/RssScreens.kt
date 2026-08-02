@@ -816,7 +816,13 @@ class ReaderScreen(
         val row by viewModel.article.collectAsState()
         val article = row?.article
         val imageStore = rememberImageStore(repository)
+        val colour by repository.colourEnabled.collectAsState(initial = true)
         val scroll = rememberScrollState()
+
+        // Only while there is actually something to see in colour. An article the feed gave no
+        // picture for has nothing but white-on-black type on screen, and lifting the whole
+        // phone's greyscale for that would be a change with no visible cause.
+        ColourEffect(colour && imageStore != null && article?.let { it.imageUrl.isNotBlank() || it.contentBlocks.isNotBlank() } == true)
 
         WheelKeys()
         WheelScroll(scroll)
@@ -939,9 +945,12 @@ class ReaderPageScreen(
         val colors by LightThemeController.colors.collectAsState()
         val state by viewModel.state.collectAsState()
         val imageStore = rememberImageStore(repository)
+        val colour by repository.colourEnabled.collectAsState(initial = true)
         val page = state.page
         val target = state.resolvedUrl.ifBlank { link }
         val scroll = rememberScrollState()
+
+        ColourEffect(colour && imageStore != null && page?.blocks?.isNotEmpty() == true)
 
         WheelKeys()
         WheelScroll(scroll)
@@ -1038,6 +1047,7 @@ class SettingsScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val imagesEnabled by viewModel.imagesEnabled.collectAsState()
+        val colourEnabled by viewModel.colourEnabled.collectAsState()
         val scroll = rememberScrollState()
 
         WheelKeys()
@@ -1074,6 +1084,16 @@ class SettingsScreen(
                     }
                     SettingsRow("CLEAR IMAGE CACHE", "Remove downloaded images, keep article text") {
                         viewModel.clearImages()
+                    }
+                    SettingsRow(
+                        title = if (colourEnabled) "COLOUR ON" else "COLOUR OFF",
+                        detail = if (colourEnabled) {
+                            "Pictures show in colour, the rest of the phone stays grey"
+                        } else {
+                            "Everything stays grey, like the rest of LightOS"
+                        },
+                    ) {
+                        viewModel.setColourEnabled(!colourEnabled)
                     }
                     SettingsRow("MARK ALL READ", "Keep saved articles and history") {
                         navigateTo({
@@ -1118,7 +1138,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 2.2.0",
+                            text = "VERSION 2.3.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

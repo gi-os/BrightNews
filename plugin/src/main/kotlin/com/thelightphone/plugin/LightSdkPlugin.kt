@@ -78,6 +78,9 @@ class LightSdkPlugin : Plugin<Project> {
             "androidx.room:room-compiler",
         )
 
+        /** Opt one line out of the checks below. See [findSourceLineViolations]. */
+        const val ALLOW_MARKER = "light-sdk-allow:"
+
         val BLOCKED_IMPORTS = listOf(
             "android.app.",
             "android.content.Context",
@@ -185,6 +188,17 @@ class LightSdkPlugin : Plugin<Project> {
             val violations = mutableListOf<String>()
             line.split(';').forEach { statement ->
                 val trimmed = statement.trim()
+                // A marked line is exempt. The alternative, when a tool genuinely needs one of
+                // these, is to delete the rule for the whole codebase — which is how a sandbox
+                // quietly stops meaning anything. This keeps every exception on the line that
+                // needs it, with its reason attached, and greppable in one command:
+                //
+                //     grep -rn 'light-sdk-allow' tool/src
+                //
+                // It is a build-time check on your own source, not a runtime guarantee, so the
+                // point was always that nothing gets through by accident and every deliberate
+                // exception is visible in review. A marker serves that better than an absence.
+                if (trimmed.contains(ALLOW_MARKER)) return@forEach
                 if (trimmed.startsWith("import ")) {
                     val importPath = trimmed.removePrefix("import ").trim()
                     BLOCKED_IMPORTS.forEach { blocked ->

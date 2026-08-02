@@ -3,11 +3,16 @@
 # orphan every subscription, saved article and read state already on the phone.
 id = "com.lightrss.reader"
 label = "News"
-versionCode = 20
-versionName = "2.2.0"
+versionCode = 21
+versionName = "2.3.0"
 permissions = [
     "android.permission.INTERNET",
     "android.permission.CAMERA",
+    # Lifts LightOS's forced greyscale while an image is on screen; see ColorMode.kt. This one is
+    # signature|privileged|development, so declaring it does nothing until it is granted once over
+    # adb, and the app degrades to grey without it rather than failing:
+    #   adb shell pm grant com.lightrss.reader android.permission.WRITE_SECURE_SETTINGS
+    "android.permission.WRITE_SECURE_SETTINGS",
 ]
 # Real Light Phone III builds communicate with LightOS. Use
 # "com.thelightphone.sdk.emulator" temporarily for local emulator runs.

@@ -341,10 +341,16 @@ class NewsletterReaderScreen(
         val body by viewModel.body.collectAsState()
         val mode by viewModel.renderMode.collectAsState()
         val loadImages by repository.imagesEnabled.collectAsState(initial = true)
+        val colour by repository.colourEnabled.collectAsState(initial = true)
         val article = row?.article
         val context = LocalContext.current
         val scroll = rememberScrollState()
         val chrome = rememberChromeVisibility()
+
+        // Newsletters are the strongest case in the app: brand art, photography and charts, laid
+        // out by someone who chose the colours. Only for the HTML path — the plain-text fallback
+        // has nothing in it but words.
+        ColourEffect(colour && loadImages && body is NewsletterBody.Html)
 
         LaunchedEffect(context) {
             viewModel.setWebViewAvailable(WebViewSupport.probe { WebView(context) })
