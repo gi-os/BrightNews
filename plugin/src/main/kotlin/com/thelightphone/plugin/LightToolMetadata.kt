@@ -144,6 +144,14 @@ object LightToolPolicy {
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.NFC",
+        // Added by News. Every other entry above is a normal or dangerous runtime permission —
+        // things a tool asks the user for. This one is signature|privileged|development, so the
+        // OS will not grant it on request at all; it takes a deliberate `adb shell pm grant` per
+        // install, and until then every call guarded by it throws SecurityException and is
+        // swallowed. It lifts the accessibility daltonizer so an image can be seen in colour, the
+        // same way LightCamera, LightChat, LightPhono and LightPass already do — none of which is
+        // an SDK tool, which is why this list had never needed it. See ColorMode.kt.
+        "android.permission.WRITE_SECURE_SETTINGS",
     )
 
     /**
