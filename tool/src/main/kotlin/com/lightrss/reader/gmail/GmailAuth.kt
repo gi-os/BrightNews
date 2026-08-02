@@ -41,7 +41,22 @@ data class GmailAuthState(
     val configured: Boolean = false,
     val signedIn: Boolean = false,
     val account: String? = null,
-)
+    /** The stored client id, so the settings screen can show which one is in use. */
+    val clientId: String? = null,
+) {
+    /**
+     * Enough of the client id to tell two of them apart, and no more.
+     *
+     * A project usually has several clients sharing one numeric prefix — an Android one and a
+     * Desktop one, say — and picking the wrong one is the single easiest mistake to make here,
+     * because the Cloud console truncates them in its own table. The distinguishing part is the
+     * random segment after the dash, so that is what this keeps.
+     */
+    val clientIdHint: String?
+        get() = clientId?.removeSuffix(".apps.googleusercontent.com")?.let { id ->
+            if (id.length <= 22) id else id.take(18) + "…"
+        }
+}
 
 /**
  * OAuth against Google, by hand, inside the app.
@@ -78,10 +93,12 @@ class GmailAuth(private val store: AuthStore) {
 
     /** Reads the store once and publishes it, so the UI can render without suspending. */
     suspend fun refreshState() {
+        val id = clientId()
         _state.value = GmailAuthState(
-            configured = clientId().isNotEmpty(),
+            configured = id.isNotEmpty(),
             signedIn = store.read(KEY_REFRESH)?.isNotBlank() == true,
             account = store.read(KEY_EMAIL),
+            clientId = id.takeIf { it.isNotEmpty() },
         )
     }
 
@@ -270,8 +287,27 @@ class GmailAuth(private val store: AuthStore) {
         refreshState()
     }
 
+    /**
+     * Sign out *and* forget which OAuth client was being used.
+     *
+     * [signOut] deliberately keeps the client id, on the grounds that it is device
+     * configuration rather than an account. That is right until the id itself is the problem —
+     * the wrong one of a project's several clients, or one whose secret has been rotated — and
+     * then keeping it is the difference between an app you can fix and one you have to
+     * reinstall. Google answers a mismatched client with a flat `invalid_request` at the
+     * consent screen, which says nothing about which of the two is wrong, so there has to be a
+     * way back out.
+     */
+    suspend fun forget() {
+        lock.withLock {
+            clearTokens()
+            listOf(KEY_CLIENT_ID, KEY_CLIENT_SECRET, KEY_REDIRECT).forEach { store.write(it, null) }
+        }
+        refreshState()
+    }
+
     private suspend fun clearTokens() {
-        // The client id survives: it is device configuration, not an account.
+        // The client id survives here; see [forget] for when it should not.
         listOf(KEY_REFRESH, KEY_ACCESS, KEY_EXPIRY, KEY_EMAIL, KEY_STATE, KEY_VERIFIER)
             .forEach { store.write(it, null) }
     }

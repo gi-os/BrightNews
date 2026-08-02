@@ -419,6 +419,39 @@ class MailboxScreen(
                         }
                     }
 
+                    /*
+                     * Always offered once a client id exists, and the reason is worth stating.
+                     * A Cloud project usually holds several OAuth clients sharing one numeric
+                     * prefix, the console truncates them in its own table, and Google answers a
+                     * mismatched one with a flat `invalid_request` at the consent screen that
+                     * names neither the client nor the redirect. Without a way to see and
+                     * replace the stored id from here, the wrong choice is unrecoverable short
+                     * of reinstalling.
+                     */
+                    if (auth.configured) {
+                        SettingsRow(
+                            title = "CLIENT ID",
+                            detail = auth.clientIdHint ?: "Replace the OAuth client",
+                        ) {
+                            navigateTo({ ClientIdChooserScreen(it, repository) })
+                        }
+                        SettingsRow(
+                            title = "REMOVE GOOGLE ACCOUNT",
+                            detail = "Sign out and forget the OAuth client",
+                        ) {
+                            navigateTo({
+                                ConfirmationScreen(
+                                    it,
+                                    message = "Remove the Google account?\n\n" +
+                                        "The sign-in, the client ID and every downloaded issue " +
+                                        "go. Followed labels stay, and fill again once you " +
+                                        "connect a mailbox.",
+                                    confirmLabel = "REMOVE",
+                                )
+                            }) { confirmed -> if (confirmed) viewModel.forget() }
+                        }
+                    }
+
                     if (labels.isEmpty()) {
                         Column(modifier = Modifier.padding(1f.gridUnitsAsDp())) {
                             LightText("NO LABELS", LightTextVariant.Superfine, lighten = true)

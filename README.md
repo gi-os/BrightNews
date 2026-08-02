@@ -3,7 +3,7 @@
 Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,
 Gmail newsletters in the other, both read in the same reader. Built on the Light SDK; tool
 id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and search stay on
-the phone. Current release: **v2.0.0** (`tool/lighttool.toml`: versionCode 17).
+the phone. Current release: **v2.0.1** (`tool/lighttool.toml`: versionCode 18).
 
 Formerly **LightRSS**, and before that a fork of
 **[zachattack323/LightRSS](https://github.com/zachattack323/LightRSS)** on
@@ -55,12 +55,14 @@ which is a restricted scope, because clearing `UNREAD` is a write — point it a
 you don't mind it touching first.
 
 1. In Gmail, filter your newsletters into a label. `LightNewsletter` is a reasonable name.
-2. In Google Cloud, create a **Desktop app** OAuth client and enable the Gmail API. Leaving
-   the consent screen in *Testing* expires every grant after seven days — publish it to
-   *In production* instead and they last until revoked. It stays unverified either way, so
-   expect a warning to click past and a lifetime cap on how many accounts may grant it;
-   neither matters for a mailbox of one. The app treats `invalid_grant` as "ask for consent
-   again" rather than retrying forever.
+2. In Google Cloud, create a **Desktop app** OAuth client and enable the Gmail API. Leave the
+   consent screen in **Testing** and add your address under *Test users*. Publishing it to
+   production is the wrong move here and worth understanding: `gmail.modify` is a *restricted*
+   scope, and an unverified app in production is blocked from requesting one outright —
+   Google answers the consent screen with a flat `Access blocked … invalid_request`. Testing
+   works, at the price of a grant that expires after seven days. The app treats the resulting
+   `invalid_grant` as "ask for consent again" rather than retrying forever, so the cost is
+   re-running step 4 weekly until you submit the app for verification.
 3. On the phone: **News → Newsletters → list button → Add client ID.** Type it, paste it, or
    scan it as a QR code off another screen.
 4. **Sign in**, then **+** to pick the label.
@@ -224,6 +226,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v2.0.1  | —         | A stored OAuth client can be seen, replaced and removed; signing out now takes the cached issues with it |
 | v2.0.0  | `29e3685` | Renamed to News. Absorbed LightNews: Gmail labels are feeds, newsletters read in the app's own reader, sign-in moved into an in-app WebView, bodies moved from files to a cascading table, hourly WorkManager polling dropped |
 | v1.12.0 | `c472d9e` | Scroll with the brightness wheel |
 | v1.11.1 | `b3c3ec3` | Put the article actions at the end of the text, not in a fixed bar |

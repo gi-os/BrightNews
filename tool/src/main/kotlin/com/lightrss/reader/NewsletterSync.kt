@@ -280,8 +280,21 @@ class NewsletterSync(private val dao: RssDao) {
     /** Throws cached bodies away so the next sync refetches them with art. */
     suspend fun clearBodies() = dao.clearBodies()
 
-    suspend fun signOut() {
-        auth.signOut()
+    /**
+     * Disconnect the mailbox.
+     *
+     * Takes the cached issues with it. They are somebody's mail and the account that authorised
+     * them is gone, so leaving them on the phone is not a caching decision. Followed labels stay
+     * as feed rows and refill on the next sign-in — it is the account that was removed, not the
+     * choice of what to read.
+     *
+     * [forgetClient] additionally drops the OAuth client id, which is what makes a wrong one
+     * recoverable; see [GmailAuth.forget].
+     */
+    suspend fun signOut(forgetClient: Boolean = false) {
+        if (forgetClient) auth.forget() else auth.signOut()
+        dao.deleteAllNewsletters()
+        dao.resetNewsletterFeeds()
         failedFetches.clear()
     }
 

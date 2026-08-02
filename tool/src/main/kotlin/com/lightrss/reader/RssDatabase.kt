@@ -442,6 +442,31 @@ interface RssDao {
     @Query("DELETE FROM articles WHERE id IN (:ids) AND isStarred = 0 AND pendingRead = 0")
     suspend fun deleteStaleNewsletters(ids: List<String>)
 
+    /**
+     * Everything a mailbox left behind.
+     *
+     * Signing out has to take the issues with it, not just the token — they are somebody's
+     * mail, they are sitting in a database on a phone, and the account that authorised them is
+     * gone. Bodies follow by cascade. The labels themselves survive as feed rows, so signing
+     * back in refills them rather than making you pick them again.
+     */
+    @Query("DELETE FROM articles WHERE feedId IN (SELECT id FROM feeds WHERE sourceType = 'GMAIL')")
+    suspend fun deleteAllNewsletters()
+
+    /**
+     * Forget the resolved label ids and the refresh clock.
+     *
+     * A label id is opaque and account-scoped, so one cached from the previous mailbox would be
+     * looked up against the next one and answer 404 forever.
+     */
+    @Query(
+        """
+        UPDATE feeds SET gmailLabelId = NULL, lastFetchedAt = 0, errorMessage = NULL
+        WHERE sourceType = 'GMAIL'
+        """,
+    )
+    suspend fun resetNewsletterFeeds()
+
     @Query("SELECT html FROM newsletter_bodies WHERE articleId = :articleId LIMIT 1")
     suspend fun getBody(articleId: String): String?
 

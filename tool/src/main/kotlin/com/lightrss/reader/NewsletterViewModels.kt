@@ -175,6 +175,11 @@ class MailboxViewModel(private val repository: RssRepository) : LightViewModel<U
         viewModelScope.launch(Dispatchers.IO) { newsletters.signOut() }
     }
 
+    /** Sign out and forget the OAuth client too, so a wrong one can be replaced. */
+    fun forget() {
+        viewModelScope.launch(Dispatchers.IO) { newsletters.signOut(forgetClient = true) }
+    }
+
     fun refresh() {
         viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = true) }
     }
