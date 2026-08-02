@@ -308,7 +308,11 @@ object NewsletterHtml {
           display: block !important; width: auto !important; height: auto !important;
           padding-left: 0 !important; padding-right: 0 !important;
         }
-        img, video, iframe { max-width: 100% !important; height: auto !important; filter: grayscale(1) contrast(1.05); }
+        /* No grayscale() here. The panel is a full-colour AMOLED behind an accessibility
+           daltonizer, so the phone already renders this grey while that is on — and does it to
+           the whole screen at once, for free. Filtering as well only meant the art could never
+           come back, on a device where somebody had turned the daltonizer off. */
+        img, video, iframe { max-width: 100% !important; height: auto !important; }
         a { color: #fff !important; text-decoration: underline; }
         h1, h2, h3, h4 { font-weight: 500; line-height: 1.25; margin: 1.1em 0 0.4em; }
         h1 { font-size: 23px; } h2 { font-size: 20px; } h3 { font-size: 18px; }

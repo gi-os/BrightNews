@@ -2,10 +2,6 @@ package com.lightrss.reader
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.Paint
 import android.util.LruCache
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,8 +23,9 @@ import java.security.MessageDigest
  *
  * Nothing is fetched until a row or article that needs the image is on screen, so image hosts are
  * contacted for the articles you actually look at rather than for every article in the database.
- * Bitmaps are downsampled to the width the screen needs and converted to greyscale for the Light
- * Phone display before they are cached, which also keeps them small in memory.
+ * Bitmaps are downsampled to the width the screen needs before they are cached, which keeps them
+ * small in memory. Colour is kept — see [decodeScaled] for why that is not a contradiction on a
+ * phone that looks black and white.
  */
 class ArticleImageStore(
     private val cacheDir: File,
@@ -83,7 +80,7 @@ class ArticleImageStore(
         }
 
         val bytes = runCatching { download(url) }.getOrNull() ?: return null
-        val bitmap = decodeGreyscale(bytes, targetWidthPx) ?: return null
+        val bitmap = decodeScaled(bytes, targetWidthPx) ?: return null
         diskLock.withLock {
             runCatching {
                 cacheDir.mkdirs()
@@ -107,7 +104,26 @@ class ArticleImageStore(
         }
     }
 
-    private fun decodeGreyscale(bytes: ByteArray, targetWidthPx: Int): Bitmap? {
+    /**
+     * Decode and downsample. Colour is kept.
+     *
+     * This used to flatten every image to greyscale with a saturation-zero `ColorMatrix`, on the
+     * reasoning that the panel is black and white. The panel is not black and white: the Light
+     * Phone III has a full-colour AMOLED, and its monochrome look is Android's accessibility
+     * daltonizer pinned to simulate-monochromacy — a system colour matrix, applied by
+     * SurfaceFlinger over everything on screen. LightOS lifts it for photos and video itself.
+     *
+     * So the conversion was buying nothing and costing the picture. The phone renders these grey
+     * either way while the daltonizer is on, and does it for free; baking it into the cache only
+     * meant the colour was gone for good, including on a device where somebody had turned the
+     * daltonizer off. See `LightCamera`'s `ColorMode` for the setting itself — it is not
+     * something a Light SDK tool can reach.
+     *
+     * [Bitmap.Config.RGB_565] stays, and note it was never the greyscale part: it is 16-bit
+     * *colour*, five bits of red and blue to six of green. It halves the cache against ARGB_8888
+     * and drops the alpha channel, which feed images do not need.
+     */
+    private fun decodeScaled(bytes: ByteArray, targetWidthPx: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
@@ -117,12 +133,11 @@ class ArticleImageStore(
         while (bounds.outWidth / (sample * 2) >= targetWidthPx) sample *= 2
         val options = BitmapFactory.Options().apply {
             inSampleSize = sample
-            // Greyscale output needs no alpha, and 16-bit pixels quarter the cache footprint.
             inPreferredConfig = Bitmap.Config.RGB_565
         }
         val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return null
 
-        val scaled = if (decoded.width > targetWidthPx) {
+        return if (decoded.width > targetWidthPx) {
             val height = (decoded.height.toFloat() * targetWidthPx / decoded.width).toInt().coerceAtLeast(1)
             Bitmap.createScaledBitmap(decoded, targetWidthPx, height, true).also {
                 if (it !== decoded) decoded.recycle()
@@ -130,21 +145,20 @@ class ArticleImageStore(
         } else {
             decoded
         }
-
-        val grey = Bitmap.createBitmap(scaled.width, scaled.height, Bitmap.Config.RGB_565)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
-        }
-        Canvas(grey).drawBitmap(scaled, 0f, 0f, paint)
-        scaled.recycle()
-        return grey
     }
 
+    /**
+     * The generation suffix is what makes a change to [decodeScaled] take effect on a phone that
+     * is already full of images. Everything cached before this one was flattened to greyscale on
+     * the way in, and the key alone would go on matching it forever — the reader would update and
+     * every picture it already had would stay grey, for no reason it could explain. Bumping the
+     * generation simply misses them; [trimCache] evicts them by age.
+     */
     private fun cacheKey(url: String, targetWidthPx: Int): String {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(url.toByteArray(Charsets.UTF_8))
             .joinToString("") { byte -> "%02x".format(byte) }
-        return "${digest.take(32)}_$targetWidthPx"
+        return "${digest.take(32)}_${targetWidthPx}_$CACHE_GENERATION"
     }
 
     companion object {
@@ -157,6 +171,9 @@ class ArticleImageStore(
         private const val MEMORY_CACHE_BYTES = 8 * 1024 * 1024
         private const val MAX_DISK_CACHE_BYTES = 24L * 1024 * 1024
         private const val MIN_IMAGE_EDGE_PX = 32
+
+        /** Bump whenever the decode changes what a cached file contains. 2 dropped greyscale. */
+        private const val CACHE_GENERATION = 2
     }
 }
 

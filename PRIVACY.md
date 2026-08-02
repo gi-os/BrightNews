@@ -11,7 +11,7 @@ The local Room database contains:
 - read, saved, and archived state;
 - a flag recording whether the starter subscriptions were created, and whether images are switched on.
 
-Downloaded images are stored as greyscale JPEG files in the app's private `images` folder, capped at 24 MB, and are never uploaded anywhere.
+Downloaded images are stored as JPEG files in the app's private `images` folder, capped at 24 MB, and are never uploaded anywhere.
 
 This data stays in the app's private Android storage. Light RSS does not upload or synchronize it to a Light RSS service.
 
