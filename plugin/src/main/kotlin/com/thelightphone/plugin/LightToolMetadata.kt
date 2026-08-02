@@ -155,6 +155,16 @@ object LightToolPolicy {
     )
 
     /**
+     * Permissions the OS will not grant by installing or by asking, only by a deliberate
+     * `adb shell pm grant`. They are lint errors on sight — "Permission is only granted to system
+     * apps" — so the generated manifest carries `tools:ignore="ProtectedPermissions"` on exactly
+     * these, and on nothing else.
+     */
+    val ADB_GRANTED_PERMISSIONS: Set<String> = setOf(
+        "android.permission.WRITE_SECURE_SETTINGS",
+    )
+
+    /**
      * Permissions that Play Store / lint infer as also requiring a hardware
      * feature. Lacking a matching `<uses-feature>` element triggers
      * PermissionImpliesUnsupportedChromeOsHardware (and similar) lint

@@ -28,6 +28,22 @@ class ManifestGeneratorTest {
     }
 
     @Test
+    fun `an adb-granted permission carries the lint suppression, and others do not`() {
+        val xml = render(
+            permissions = listOf(
+                "android.permission.INTERNET",
+                "android.permission.WRITE_SECURE_SETTINGS",
+            ),
+        )
+        assertTrue(xml.contains("""xmlns:tools="http://schemas.android.com/tools""""))
+        assertTrue(xml.contains("""android:name="android.permission.WRITE_SECURE_SETTINGS""""))
+        assertTrue(xml.contains("""tools:ignore="ProtectedPermissions""""))
+        // The suppression is per-element on purpose: a plain permission must not pick it up, or
+        // the next protected one somebody adds by mistake goes through unnoticed.
+        assertTrue(xml.contains("""<uses-permission android:name="android.permission.INTERNET" />"""))
+    }
+
+    @Test
     fun `each permission becomes one uses-permission element`() {
         val xml = render(permissions = listOf(
             "android.permission.INTERNET",

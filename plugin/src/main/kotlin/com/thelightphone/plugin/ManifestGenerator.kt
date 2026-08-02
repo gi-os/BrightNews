@@ -16,9 +16,20 @@ package com.thelightphone.plugin
 object ManifestGenerator {
     fun render(metadata: LightToolMetadata): String = buildString {
         appendLine("""<?xml version="1.0" encoding="utf-8"?>""")
-        appendLine("""<manifest xmlns:android="http://schemas.android.com/apk/res/android">""")
+        appendLine("""<manifest xmlns:android="http://schemas.android.com/apk/res/android"""")
+        appendLine("""          xmlns:tools="http://schemas.android.com/tools">""")
         for (perm in metadata.permissions) {
-            appendLine("""    <uses-permission android:name="${xmlAttr(perm)}" />""")
+            // A permission the OS will never grant on request needs the lint suppression on the
+            // element itself, the way every hand-written manifest in this portfolio does it —
+            // rather than switching ProtectedPermissions off for the module, which would also
+            // hide the next one somebody adds by mistake.
+            if (perm in LightToolPolicy.ADB_GRANTED_PERMISSIONS) {
+                appendLine("""    <uses-permission""")
+                appendLine("""        android:name="${xmlAttr(perm)}"""")
+                appendLine("""        tools:ignore="ProtectedPermissions" />""")
+            } else {
+                appendLine("""    <uses-permission android:name="${xmlAttr(perm)}" />""")
+            }
         }
         // Emit Play-Store-inferred hardware features as required="false" so
         // PermissionImpliesUnsupportedChromeOsHardware lint stays quiet and
