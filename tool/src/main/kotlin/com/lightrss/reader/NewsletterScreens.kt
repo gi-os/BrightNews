@@ -251,7 +251,7 @@ private const val NEWSLETTER_BASE = "http://newsletter.invalid/"
  * back and forth. A reversal resets the count, so the gesture that counts is the one in progress.
  */
 @Stable
-private class ChromeVisibility(
+internal class ChromeVisibility(
     private val nearTopPx: Int,
     private val hideAfterPx: Int,
     private val showAfterPx: Int,
@@ -282,7 +282,7 @@ private class ChromeVisibility(
 }
 
 @Composable
-private fun rememberChromeVisibility(): ChromeVisibility {
+internal fun rememberChromeVisibility(): ChromeVisibility {
     val density = LocalDensity.current
     return remember(density) {
         with(density) {
@@ -303,7 +303,7 @@ private fun rememberChromeVisibility(): ChromeVisibility {
  * which is the point — at the cost of a reflow, which the short slide covers.
  */
 @Composable
-private fun ReaderChrome(visible: Boolean, content: @Composable () -> Unit) {
+internal fun ReaderChrome(visible: Boolean, content: @Composable () -> Unit) {
     AnimatedVisibility(
         visible = visible,
         enter = expandVertically(animationSpec = tween(CHROME_MS)) +

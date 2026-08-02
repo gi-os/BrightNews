@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  RSS, drawn to sit beside the SDK's own icons: white on transparent, 24dp square,
+  2dp strokes with round caps, and the same generous optical margin they use so it
+  does not read heavier than SPACER beside it.
+
+  The broadcast arcs rather than the feed-reader square, because the square is a
+  logo and the arcs are a picture of what a feed is.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M5,18.5 m-1.6,0 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M4,12.2 A7.8,7.8 0 0,1 11.8,20"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M4,6.2 A13.8,13.8 0 0,1 17.8,20"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+</vector>

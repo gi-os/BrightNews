@@ -3,7 +3,7 @@
 Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,
 Gmail newsletters in the other, both read in the same reader. Built on the Light SDK; tool
 id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and search stay on
-the phone. Current release: **v2.3.0** (`tool/lighttool.toml`: versionCode 21).
+the phone. Current release: **v2.4.0** (`tool/lighttool.toml`: versionCode 22).
 
 Formerly **LightRSS**, and before that a fork of
 **[zachattack323/LightRSS](https://github.com/zachattack323/LightRSS)** on

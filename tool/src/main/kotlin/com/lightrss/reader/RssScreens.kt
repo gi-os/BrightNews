@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.painterResource
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.style.TextOverflow
 import com.lightrss.reader.hw.WheelScroll
 import com.lightrss.reader.hw.WheelKeys
@@ -78,153 +80,34 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
     @Composable
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
-        val rssUnread by viewModel.rssUnread.collectAsState()
-        val newsletterUnread by viewModel.newsletterUnread.collectAsState()
-        val feedCount by viewModel.feedCount.collectAsState()
-        val labelCount by viewModel.labelCount.collectAsState()
-        val sync by viewModel.syncState.collectAsState()
-        val repository = viewModel.repository
-
-        WheelKeys()
-        LightTheme(colors = colors) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(LightThemeTokens.colors.background),
-            ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(
-                        icon = LightIcons.SETTINGS,
-                        onClick = { navigateTo({ SettingsScreen(it, repository) }) },
-                    ),
-                    center = LightTopBarCenter.Text("News"),
-                    rightButton = LightBarButton.LightIcon(
-                        icon = LightIcons.SEARCH,
-                        onClick = { navigateTo({ SearchScreen(it, repository) }) },
-                        contentDescription = "Search everything",
-                    ),
-                )
-                StatusLine(
-                    when {
-                        sync.isRefreshing -> "SYNC ${sync.completedFeeds}/${sync.totalFeeds}"
-                        sync.message?.contains("could not", ignoreCase = true) == true -> sync.message
-                        else -> null
-                    },
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    SectionRow(
-                        title = "RSS",
-                        unread = rssUnread,
-                        detail = when (feedCount) {
-                            0 -> "No feeds yet"
-                            1 -> "1 feed"
-                            else -> "$feedCount feeds"
-                        },
-                    ) {
-                        navigateTo({ SectionScreen(it, Source.RSS, repository) })
-                    }
-                    SectionRow(
-                        title = "NEWSLETTERS",
-                        unread = newsletterUnread,
-                        detail = when (labelCount) {
-                            0 -> "Not set up — open to connect Gmail"
-                            1 -> "1 label"
-                            else -> "$labelCount labels"
-                        },
-                    ) {
-                        navigateTo({ SectionScreen(it, Source.GMAIL, repository) })
-                    }
-                }
-                LightBottomBar(
-                    items = listOf(
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.STAR_OUTLINE,
-                            onClick = { navigateTo({ SavedScreen(it, repository) }) },
-                            contentDescription = "Saved",
-                        ),
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.REFRESH,
-                            onClick = viewModel::refresh,
-                        ),
-                    ),
-                )
-            }
-        }
-    }
-}
-
-/**
- * A section on the home screen.
- *
- * Taller than a settings row and headed in [LightTextVariant.Subheading], because these two are
- * the app's top-level choice rather than an option inside it. The unread count is part of the
- * detail line rather than a badge: the panel is monochrome, so a badge is just a smaller number
- * in a harder place to read.
- */
-@Composable
-private fun SectionRow(
-    title: String,
-    unread: Int,
-    detail: String,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .lightClickable(onClickLabel = title, role = Role.Button) { onClick() }
-            .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 1.25f.gridUnitsAsDp()),
-    ) {
-        LightText(title, LightTextVariant.Subheading, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        LightText(
-            text = listOf(
-                when (unread) {
-                    0 -> "All read"
-                    1 -> "1 unread"
-                    else -> "$unread unread"
-                },
-                detail,
-            ).joinToString(" · "),
-            variant = LightTextVariant.Superfine,
-            lighten = true,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 0.4f.gridUnitsAsDp()),
-        )
-    }
-}
-
-/**
- * One section's articles: the list this app used to open straight into, now scoped to a source.
- *
- * Both sections are this screen. The differences are two words in the top bar and where the
- * list button goes — Subscriptions for feeds, Mailbox for labels — because past the source
- * filter there is nothing about a newsletter that a list of articles needs to know.
- */
-class SectionScreen(
-    sealedActivity: SealedLightActivity,
-    private val source: String,
-    private val repository: RssRepository,
-) : LightScreen<Unit, SectionViewModel>(sealedActivity) {
-    override val viewModelClass: Class<SectionViewModel> = SectionViewModel::class.java
-    override fun createViewModel() = SectionViewModel(source, repository)
-
-    @Composable
-    override fun Content() {
-        val colors by LightThemeController.colors.collectAsState()
+        val section by viewModel.section.collectAsState()
         val articles by viewModel.articles.collectAsState()
         val unreadOnly by viewModel.unreadOnly.collectAsState()
         val favoritesOnly by viewModel.favoritesOnly.collectAsState()
         val favoriteCount by viewModel.favoriteFeedCount.collectAsState()
+        val labelCount by viewModel.labelCount.collectAsState()
         val sync by viewModel.syncState.collectAsState()
         val jumpToNewest by viewModel.jumpToNewest.collectAsState()
+        val repository = viewModel.repository
         val imageStore = rememberImageStore(repository)
         val listState = rememberLazyListState()
-        val newsletters = source == Source.GMAIL
+        val chrome = rememberChromeVisibility()
+        val newsletters = section == Source.GMAIL
 
-        // Opening the section lands on the newest item, even when a sync has just slipped fresh
-        // ones in above where the list was left.
         LaunchedEffect(jumpToNewest) {
             if (jumpToNewest > 0) listState.scrollToItem(0)
+        }
+
+        // Same rules as the reader's bars: hide going forwards, back on any scroll up or near the
+        // top. The list reports in item indices rather than pixels, so a row's height stands in
+        // for the distance — close enough for a threshold, and it needs no measurement.
+        LaunchedEffect(listState, chrome) {
+            var last = 0
+            snapshotFlow { listState.firstVisibleItemIndex * ROW_STEP_PX + listState.firstVisibleItemScrollOffset }
+                .collect { y ->
+                    chrome.onScrolled(y - last, y)
+                    last = y
+                }
         }
 
         WheelKeys()
@@ -234,28 +117,34 @@ class SectionScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                key(unreadOnly, favoritesOnly) {
-                    LightTopBar(
-                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                        center = LightTopBarCenter.Text(
-                            when {
-                                newsletters -> "Newsletters"
-                                favoritesOnly -> "Favorites"
-                                else -> "RSS"
-                            },
-                        ),
-                        rightButton = LightBarButton.LightIcon(
-                            icon = LightIcons.LIST,
-                            onClick = {
-                                if (newsletters) {
-                                    navigateTo({ MailboxScreen(it, repository) })
-                                } else {
-                                    navigateTo({ FeedsScreen(it, repository) })
-                                }
-                            },
-                            contentDescription = if (newsletters) "Mailbox" else "Subscriptions",
-                        ),
-                    )
+                ReaderChrome(chrome.visible) {
+                    key(unreadOnly, favoritesOnly, newsletters) {
+                        LightTopBar(
+                            leftButton = LightBarButton.LightIcon(
+                                icon = LightIcons.LIST,
+                                onClick = {
+                                    if (newsletters) {
+                                        navigateTo({ MailboxScreen(it, repository) })
+                                    } else {
+                                        navigateTo({ FeedsScreen(it, repository) })
+                                    }
+                                },
+                                contentDescription = if (newsletters) "Mailbox" else "Subscriptions",
+                            ),
+                            center = LightTopBarCenter.Text(
+                                when {
+                                    newsletters -> "Newsletters"
+                                    favoritesOnly -> "Favorites"
+                                    else -> "RSS"
+                                },
+                            ),
+                            rightButton = LightBarButton.LightIcon(
+                                icon = LightIcons.SEARCH,
+                                onClick = { navigateTo({ SearchScreen(it, repository) }) },
+                                contentDescription = "Search everything",
+                            ),
+                        )
+                    }
                 }
                 StatusLine(
                     when {
@@ -266,7 +155,7 @@ class SectionScreen(
                 )
                 ArticleList(
                     articles = articles,
-                    emptyMessage = emptyMessage(newsletters, unreadOnly, favoritesOnly, favoriteCount),
+                    emptyMessage = emptyMessage(newsletters, unreadOnly, favoritesOnly, favoriteCount, labelCount),
                     onOpen = { row ->
                         navigateTo({ articleReader(it, row.article.id, repository) })
                     },
@@ -274,18 +163,28 @@ class SectionScreen(
                     imageStore = imageStore,
                     listState = listState,
                 )
-                LightBottomBar(
-                    items = listOf(
-                        LightBarButton.Text(
-                            text = if (unreadOnly) "UNREAD" else "ALL",
-                            onClick = viewModel::toggleFilter,
+                ReaderChrome(chrome.visible) {
+                    LightBottomBar(
+                        items = listOf(
+                            SectionTab(
+                                iconRes = R.drawable.ic_rss_white,
+                                label = "RSS",
+                                selected = !newsletters,
+                                onClick = { viewModel.showSection(Source.RSS) },
+                            ),
+                            SectionTab(
+                                iconRes = R.drawable.ic_newsletter_white,
+                                label = "Newsletters",
+                                selected = newsletters,
+                                onClick = { viewModel.showSection(Source.GMAIL) },
+                            ),
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.REFRESH,
+                                onClick = viewModel::refresh,
+                            ),
                         ),
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.REFRESH,
-                            onClick = viewModel::refresh,
-                        ),
-                    ),
-                )
+                    )
+                }
             }
         }
     }
@@ -295,21 +194,52 @@ class SectionScreen(
         unreadOnly: Boolean,
         favoritesOnly: Boolean,
         favoriteCount: Int,
+        labelCount: Int,
     ): String = when {
-        newsletters && unreadOnly ->
-            "Nothing unread.\n\nFollow a Gmail label from the list button, or switch the " +
-                "filter to revisit past issues."
-        newsletters ->
+        newsletters && labelCount == 0 ->
             "No newsletters yet.\n\nOpen the list button to connect Gmail and follow a label."
+        newsletters && unreadOnly ->
+            "Nothing unread.\n\nSwitch the filter to revisit past issues."
+        newsletters -> "No issues downloaded yet.\n\nRefresh from the mailbox."
         favoritesOnly && favoriteCount == 0 ->
             "No favorite feeds yet.\n\nStar a feed in Subscriptions, or switch back to all feeds."
-        favoritesOnly && unreadOnly ->
-            "You’re all caught up on your favorites.\n\nSwitch the filter to revisit the archive."
-        unreadOnly ->
-            "You’re all caught up.\n\nSwitch the filter to revisit the archive."
+        unreadOnly -> "You’re all caught up.\n\nSwitch the filter to revisit the archive."
         else -> "No articles yet.\n\nRefresh or add a subscription."
     }
 }
+
+/**
+ * One of the two sections, as a bottom-bar tab.
+ *
+ * The selected one is filled and the other is outlined — the panel has no accent colour to spend
+ * on a selection, and dimming the inactive tab would read as disabled rather than unselected.
+ *
+ * A painter rather than a [LightIcons] entry because the SDK has neither an RSS mark nor an open
+ * envelope. The two drawables live in `tool/src/main/res/drawable` and are drawn to the same
+ * spec as the SDK's own — white on transparent, 24dp, 2dp round-cap strokes — so they do not read
+ * as visitors in the bar.
+ */
+@Composable
+private fun SectionTab(
+    iconRes: Int,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+): LightBarButton = LightBarButton.Icon(
+    painter = painterResource(iconRes),
+    onClick = onClick,
+    contentDescription = if (selected) "$label, showing" else label,
+    sizeUnits = if (selected) 2.3f else 2f,
+)
+
+/**
+ * A stand-in for a row's height in pixels.
+ *
+ * The list reports its position as an item index plus an offset, and turning that into a real
+ * distance would mean measuring rows. For deciding whether a scroll was a deliberate move, a
+ * constant per row is enough — it only has to be the right order of magnitude.
+ */
+private const val ROW_STEP_PX = 260
 
 /**
  * The right reader for an article.
@@ -347,6 +277,7 @@ class FeedsScreen(
         val colors by LightThemeController.colors.collectAsState()
         val feeds by viewModel.feeds.collectAsState()
         val favoritesOnly by viewModel.favoritesOnly.collectAsState()
+        val unreadOnly by viewModel.unreadOnly.collectAsState()
 
         WheelKeys()
         LightTheme(colors = colors) {
@@ -366,6 +297,15 @@ class FeedsScreen(
                             }
                         },
                     ),
+                )
+                SettingsRow(
+                    title = if (unreadOnly) "SHOWING UNREAD" else "SHOWING ALL",
+                    detail = if (unreadOnly) {
+                        "Read items are hidden — tap to show everything"
+                    } else {
+                        "Everything, read or not — tap for unread only"
+                    },
+                    onClick = viewModel::toggleUnreadOnly,
                 )
                 SettingsRow(
                     title = "HOME SHOWS",
@@ -1138,7 +1078,7 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 2.3.0",
+                            text = "VERSION 2.4.0",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

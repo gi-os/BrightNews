@@ -28,10 +28,55 @@ import kotlinx.coroutines.withContext
  * make the extra tap worth it: you can see whether there is anything in either without opening
  * one.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     val repository: RssRepository,
     private val database: RssDatabase,
 ) : LightViewModel<Unit>() {
+
+    /**
+     * Which section the list is showing. Not persisted on purpose: the app opens on RSS because
+     * that is the one with something new in it most days, and a remembered tab means opening to
+     * whatever you happened to be looking at last week.
+     */
+    private val _section = MutableStateFlow(Source.RSS)
+    val section: StateFlow<String> = _section.asStateFlow()
+
+    fun showSection(source: String) {
+        if (_section.value == source) return
+        _section.value = source
+        _jumpToNewest.update { it + 1 }
+    }
+
+    val unreadOnly: StateFlow<Boolean> = repository.homeUnreadOnly
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val favoritesOnly: StateFlow<Boolean> = repository.homeFavoritesOnly
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val favoriteFeedCount: StateFlow<Int> = repository.observeFavoriteFeedCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val articles: StateFlow<List<ArticleRow>> =
+        combine(_section, unreadOnly, favoritesOnly) { section, unread, favourites ->
+            // Favourites are an RSS idea; a mailbox has no starred labels to narrow to.
+            Triple(section, unread, favourites && section == Source.RSS)
+        }.flatMapLatest { (section, unread, favourites) ->
+            repository.observeInbox(unread, favourites, section)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Bumped when the list should go back to the newest item: on first show, after the app has
+     * been away, and on a section change — switching tabs and landing halfway down the new one
+     * would be disorienting in a way that returning from the reader is not.
+     */
+    private val _jumpToNewest = MutableStateFlow(0)
+    val jumpToNewest: StateFlow<Int> = _jumpToNewest.asStateFlow()
+    private var jumpPending = true
+
+    override fun onAppPause() {
+        super.onAppPause()
+        jumpPending = true
+    }
 
     val rssUnread: StateFlow<Int> = repository.observeUnreadCount(Source.RSS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -57,6 +102,10 @@ class HomeViewModel(
 
     override fun onScreenShow(screen: SimpleLightScreen<Unit>) {
         super.onScreenShow(screen)
+        if (jumpPending) {
+            jumpPending = false
+            _jumpToNewest.update { it + 1 }
+        }
         if (initialized) {
             viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = false) }
         }
@@ -78,75 +127,21 @@ class HomeViewModel(
     }
 }
 
-/** One section's article list. [source] is [Source.RSS] or [Source.GMAIL]. */
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-class SectionViewModel(
-    private val source: String,
-    val repository: RssRepository,
-) : LightViewModel<Unit>() {
-    private val _unreadOnly = MutableStateFlow(true)
-    val unreadOnly: StateFlow<Boolean> = _unreadOnly.asStateFlow()
-
-    /**
-     * Whether the list is narrowed to favourite feeds. Chosen in Subscriptions, stored in the
-     * database, and only meaningful for RSS — a mailbox has no favourites, so the newsletters
-     * section pins it off rather than showing a filter that does nothing.
-     */
-    val favoritesOnly: StateFlow<Boolean> =
-        if (source == Source.RSS) {
-            repository.homeFavoritesOnly
-                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-        } else {
-            MutableStateFlow(false).asStateFlow()
-        }
-
-    val favoriteFeedCount: StateFlow<Int> = repository.observeFavoriteFeedCount()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-
-    val articles: StateFlow<List<ArticleRow>> = combine(_unreadOnly, favoritesOnly, ::Pair)
-        .flatMapLatest { (unreadOnly, favoritesOnly) ->
-            repository.observeInbox(unreadOnly, favoritesOnly, source)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val syncState: StateFlow<SyncState> = repository.syncState
-
-    /**
-     * Bumped whenever the list should go back to the newest article: the first time the screen
-     * is shown, and again after the app has been away in the background. Coming back from the
-     * reader does not bump it, so a half-read list keeps its place.
-     */
-    private val _jumpToNewest = MutableStateFlow(0)
-    val jumpToNewest: StateFlow<Int> = _jumpToNewest.asStateFlow()
-    private var jumpPending = true
-
-    override fun onScreenShow(screen: SimpleLightScreen<Unit>) {
-        super.onScreenShow(screen)
-        if (jumpPending) {
-            jumpPending = false
-            _jumpToNewest.update { it + 1 }
-        }
-    }
-
-    override fun onAppPause() {
-        super.onAppPause()
-        jumpPending = true
-    }
-
-    fun toggleFilter() = _unreadOnly.update { !it }
-
-    fun refresh() {
-        viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = true) }
-    }
-}
-
 class FeedsViewModel(private val repository: RssRepository) : LightViewModel<Unit>() {
     val feeds: StateFlow<List<FeedRow>> = repository.observeFeeds(Source.RSS)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** The home scope, shown and flipped from the row above the subscription list. */
+    /** The home scope, shown and flipped from the rows above the subscription list. */
     val favoritesOnly: StateFlow<Boolean> = repository.homeFavoritesOnly
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val unreadOnly: StateFlow<Boolean> = repository.homeUnreadOnly
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun toggleUnreadOnly() {
+        val next = !unreadOnly.value
+        viewModelScope.launch(Dispatchers.IO) { repository.setHomeUnreadOnly(next) }
+    }
 
     fun toggleHomeScope() {
         val next = !favoritesOnly.value

@@ -255,6 +255,15 @@ class RssRepository(
         .map { it == "1" }
         .distinctUntilChanged()
 
+    /** Whether the list hides what has been read. Defaults to on. */
+    val homeUnreadOnly: Flow<Boolean> = dao.observeMetadata(HOME_UNREAD_KEY)
+        .map { it != "0" }
+        .distinctUntilChanged()
+
+    suspend fun setHomeUnreadOnly(enabled: Boolean) {
+        dao.putMetadata(AppMetadataEntity(HOME_UNREAD_KEY, if (enabled) "1" else "0"))
+    }
+
     suspend fun setHomeFavoritesOnly(enabled: Boolean) {
         dao.putMetadata(AppMetadataEntity(HOME_FAVORITES_KEY, if (enabled) "1" else "0"))
     }
@@ -542,6 +551,7 @@ class RssRepository(
         private const val SHOW_IMAGES_KEY = "show_images"
         private const val COLOUR_KEY = "lift_greyscale"
         private const val HOME_FAVORITES_KEY = "home_favorites_only"
+        private const val HOME_UNREAD_KEY = "home_unread_only"
         private const val AUTO_REFRESH_AGE_MS = 15 * 60 * 1_000L
         private const val MAX_TITLE_LENGTH = 600
         private const val MAX_AUTHOR_LENGTH = 300
