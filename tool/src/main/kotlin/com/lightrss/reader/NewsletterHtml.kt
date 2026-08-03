@@ -78,12 +78,39 @@ object NewsletterHtml {
                 .attr("name", "viewport")
                 .attr("content", "width=device-width, initial-scale=1, maximum-scale=3"),
         )
-        doc.head().appendChild(
-            Element("style").appendText(if (mode == RenderMode.DARK) DARK_CSS else PAPER_CSS),
-        )
+        val css = when {
+            mode == RenderMode.DARK -> DARK_CSS
+            // Only assume white paper when the newsletter did not say otherwise. Forcing it on a
+            // light-on-dark design overrides the background and keeps the light text, which is
+            // white on white — invisible copy with the link borders still showing, because a
+            // border keeps its own colour when the text does not.
+            declaresBackground(doc) -> PAPER_CSS
+            else -> PAPER_CSS + PAPER_WHITE_CSS
+        }
+        doc.head().appendChild(Element("style").appendText(css))
         meta?.let { prependHeader(doc, it) }
         // Links open in the system browser; see the WebViewClient in NewsletterWebView.
         return doc.outerHtml()
+    }
+
+    /**
+     * Whether the document sets a page background of its own.
+     *
+     * Newsletters say this in three places and mean the same thing by all of them: a `bgcolor`
+     * attribute (2011 mail HTML), an inline `background` on html or body, or a rule for either in
+     * a stylesheet. A wrapper table filling the page counts too — that is how most of them do a
+     * full-bleed background, and treating it as "no background" is what put white behind a dark
+     * design in the first place.
+     */
+    private fun declaresBackground(doc: Document): Boolean {
+        val roots = doc.select("html, body")
+        if (roots.any { it.hasAttr("bgcolor") }) return true
+        if (roots.any { BACKGROUND_DECL.containsMatchIn(it.attr("style")) }) return true
+        if (doc.select("style").any { BACKGROUND_RULE.containsMatchIn(it.data()) }) return true
+        // A full-width wrapper immediately inside body, which is the usual full-bleed trick.
+        return doc.select("body > table[bgcolor], body > table[style], body > div[style]")
+            .take(3)
+            .any { it.hasAttr("bgcolor") || BACKGROUND_DECL.containsMatchIn(it.attr("style")) }
     }
 
     /**
@@ -337,12 +364,32 @@ object NewsletterHtml {
                   margin: 14px 0; }
     """.trimIndent()
 
+    /** Anything that sets a background, in a style attribute. */
+    private val BACKGROUND_DECL = Regex("""(?:^|[;\s])background(?:-color|-image)?\s*:""", RegexOption.IGNORE_CASE)
+
+    /** The same, in a stylesheet rule for html or body. */
+    private val BACKGROUND_RULE = Regex(
+        """(?:^|[,}\s])(?:html|body)\b[^{}]*\{[^{}]*background""",
+        setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
+
+    /**
+     * Applied only when the newsletter declared no background of its own.
+     *
+     * Kept apart from [PAPER_CSS] because it is an assumption rather than a correction: mail with
+     * no stated background was written for a white client, and on this app's black WebView its
+     * dark text would otherwise vanish. Applying it unconditionally does the same damage in
+     * reverse to anything designed light-on-dark.
+     */
+    private val PAPER_WHITE_CSS = """
+        html, body { background: #fff !important; }
+        body { color: #111; }
+        .ln-head { background: #fff !important; }
+    """.trimIndent()
+
     private val PAPER_CSS = """
         html { -webkit-text-size-adjust: 100%; }
-        /* A newsletter that sets no background assumes white. Say so, or the email's own dark
-           text lands on the app's black WebView and vanishes. */
-        html, body { background: #fff !important; }
-        body { margin: 0 !important; padding: 0 !important; color: #111; }
+        body { margin: 0 !important; padding: 0 !important; }
         /* Only the width is really wrong; the palette was designed for white paper, which is
            what a matte monochrome panel most resembles. Small type is floored by WebView's
            minimumFontSize rather than a blanket override here, so the newsletter's own
@@ -352,7 +399,7 @@ object NewsletterHtml {
         img, video, iframe { max-width: 100% !important; height: auto !important; }
 
         /* PAPER keeps the newsletter's palette, so the header has to sit on white. */
-        .ln-head { margin: 0; padding: 14px 18px 0; background: #fff !important; }
+        .ln-head { margin: 0; padding: 14px 18px 0; }
         .ln-subject { font-size: 22px !important; font-weight: 600; line-height: 1.25;
                       margin: 0 0 6px; color: #111 !important; }
         .ln-meta { font-size: 12px !important; letter-spacing: 1.2px; text-transform: uppercase;

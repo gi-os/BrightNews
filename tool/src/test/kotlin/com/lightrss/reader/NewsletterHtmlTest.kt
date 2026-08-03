@@ -83,6 +83,67 @@ class NewsletterHtmlTest {
     }
 
     @Test
+    fun `paper mode leaves a light-on-dark newsletter alone`() {
+        // The bug this covers: forcing white on a design that states its own dark background
+        // kept the light text and gave white on white — invisible copy, with link borders still
+        // showing, because a border keeps its colour when the text does not.
+        val html = """
+            <html><body style="background:#111111;color:#ffffff">
+            <a href="https://x.example" style="color:#ffffff;border-bottom:1px solid #4aa3ff">Read</a>
+            <p style="color:#ffffff">Body copy.</p></body></html>
+        """.trimIndent()
+
+        val out = NewsletterHtml.rewrite(html, RenderMode.PAPER, loadImages = false)
+
+        assertFalse("html, body { background: #fff !important; }" in out)
+        assertContains(out, "background:#111111")
+    }
+
+    @Test
+    fun `paper mode still assumes white when nothing says otherwise`() {
+        // Mail with no stated background was written for a white client; without this its dark
+        // text lands on the app's black WebView and vanishes.
+        val html = """<html><body><p style="color:#222">Body copy.</p></body></html>"""
+
+        val out = NewsletterHtml.rewrite(html, RenderMode.PAPER, loadImages = false)
+
+        assertContains(out, "html, body { background: #fff !important; }")
+    }
+
+    @Test
+    fun `a bgcolor attribute counts as a stated background`() {
+        val html = """<html><body bgcolor="#0b0b0c"><p style="color:#fff">Copy.</p></body></html>"""
+
+        val out = NewsletterHtml.rewrite(html, RenderMode.PAPER, loadImages = false)
+
+        assertFalse("html, body { background: #fff !important; }" in out)
+    }
+
+    @Test
+    fun `a full-bleed wrapper table counts too`() {
+        // How most newsletters actually do a page background, rather than styling body.
+        val html = """
+            <html><body><table style="background-color:#101010;width:100%">
+            <tr><td><p style="color:#eee">Copy.</p></td></tr></table></body></html>
+        """.trimIndent()
+
+        val out = NewsletterHtml.rewrite(html, RenderMode.PAPER, loadImages = false)
+
+        assertFalse("html, body { background: #fff !important; }" in out)
+    }
+
+    @Test
+    fun `dark mode is unaffected by what the newsletter declares`() {
+        // DARK forces both halves, so it stays internally consistent either way.
+        val html = """<html><body style="background:#111;color:#fff"><p>Copy.</p></body></html>"""
+
+        val out = NewsletterHtml.rewrite(html, RenderMode.DARK, loadImages = false)
+
+        assertContains(out, "html, body { background: #000 !important; }")
+        assertFalse("background:#111" in out)
+    }
+
+    @Test
     fun `a sponsor card is cut and marked`() {
         val html = """
             <html><body>
