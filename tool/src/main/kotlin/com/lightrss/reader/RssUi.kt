@@ -116,7 +116,7 @@ private fun ArticleListRow(
             }
             Row(modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp())) {
                 LightText(
-                    text = row.feedTitle,
+                    text = sourceLine(row),
                     variant = LightTextVariant.Superfine,
                     lighten = true,
                     maxLines = 1,
@@ -133,6 +133,24 @@ private fun ArticleListRow(
             }
         }
     }
+}
+
+/**
+ * The line under the title: who wrote it, then where it came from.
+ *
+ * For a feed the two are usually the same thing, and the feed's own name is the useful half — a
+ * byline that reads "BBC News" beside a title from BBC World tells you nothing.
+ *
+ * A newsletter is the other way round. Every issue in a label carries the same label, so showing
+ * only that gives a screen of rows all claiming the same source; what actually varies, and what
+ * you recognise, is the sender. So the sender leads and the label follows it, which also keeps the
+ * label visible for anyone following more than one.
+ */
+private fun sourceLine(row: ArticleRow): String {
+    val sender = row.article.author.trim()
+    if (!NewsletterSync.isNewsletter(row.article.id) || sender.isEmpty()) return row.feedTitle
+    if (sender.equals(row.feedTitle, ignoreCase = true)) return row.feedTitle
+    return "$sender · ${row.feedTitle}"
 }
 
 @Composable
