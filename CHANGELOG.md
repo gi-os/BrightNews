@@ -8,6 +8,24 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.
 
+## 2.5.0 - 2026-08-05
+
+### Changed
+
+- Release builds use R8 full mode. Keep rules were added for Room's generated database and DAO
+  implementations, which are loaded by name, and for jsoup's compile-only nullability
+  annotations, which R8 treats as a fatal missing reference. Stack traces keep their line
+  numbers.
+
+### Not done
+
+- The move onto `com.gios:light-common` was not possible. The Light SDK plugin's dependency
+  allowlist does not include it, and the library's wheel bus expects an activity to feed it,
+  which a tool does not have.
+- The LightSync backup provider was not possible. A tool's manifest is generated from
+  `lighttool.toml` and cannot declare a `ContentProvider`, and the sandbox blocks the imports
+  one would need.
+
 ## 1.12.0 - 2026-07-29
 
 ### Added
