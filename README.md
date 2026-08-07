@@ -5,6 +5,17 @@ Gmail newsletters in the other, both read in the same reader. Built on the Light
 id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and search stay on
 the phone. Current release: **v2.4.0** (`tool/lighttool.toml`: versionCode 22).
 
+## Install via BrightMarket
+
+<p align="center">
+  <img src="https://gi-os.github.io/brightmarket-index/assets/brightmarket-qr.png" alt="Scan to open BrightMarket" width="180" />
+</p>
+
+Scan the code above, or visit
+**[gi-os.github.io/brightmarket-index/browse.html](https://gi-os.github.io/brightmarket-index/browse.html)**, to install
+and keep this app updated through **BrightMarket** — no Play Store, no PC
+required.
+
 Formerly **LightRSS**, and before that a fork of
 **[zachattack323/LightRSS](https://github.com/zachattack323/LightRSS)** on
 `lightphone/light-sdk`'s tool scaffold. This fork added article/list images, subscribing by
