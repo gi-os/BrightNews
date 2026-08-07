@@ -8,13 +8,13 @@ the phone. Current release: **v2.4.0** (`tool/lighttool.toml`: versionCode 22).
 ## Install via BrightMarket
 
 <p align="center">
-  <img src="https://gi-os.github.io/brightmarket-index/assets/brightmarket-qr.png" alt="Scan to open BrightMarket" width="180" />
+  <img src="https://gi-os.github.io/brightmarket-index/assets/qr/BrightNews.png" alt="Scan to open BrightNews in BrightMarket" width="180" />
 </p>
 
-Scan the code above, or visit
-**[gi-os.github.io/brightmarket-index/browse.html](https://gi-os.github.io/brightmarket-index/browse.html)**, to install
-and keep this app updated through **BrightMarket** — no Play Store, no PC
-required.
+Scan the code above with **BrightMarket** installed to open BrightNews there and
+install or update it directly. Don't have BrightMarket yet? Get it, and browse
+every Bright app, at
+**[gi-os.github.io/brightmarket-index/browse.html](https://gi-os.github.io/brightmarket-index/browse.html)**.
 
 Formerly **LightRSS**, and before that a fork of
 **[zachattack323/LightRSS](https://github.com/zachattack323/LightRSS)** on
