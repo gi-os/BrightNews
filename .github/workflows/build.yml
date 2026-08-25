@@ -3,6 +3,8 @@ name: Trusted build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
 
 permissions:
   contents: read

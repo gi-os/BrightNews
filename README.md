@@ -14,7 +14,7 @@ the phone. Current release: **v2.4.0** (`tool/lighttool.toml`: versionCode 22).
 Scan the code above with **BrightMarket** installed to open BrightNews there and
 install or update it directly. Don't have BrightMarket yet? Get it, and browse
 every Bright app, at
-**[gi-os.github.io/brightmarket-index/browse.html](https://gi-os.github.io/brightmarket-index/browse.html)**.
+**[brightmarket.gzl.dev](https://brightmarket.gzl.dev)**.
 
 Formerly **LightRSS**, and before that a fork of
 **[zachattack323/LightRSS](https://github.com/zachattack323/LightRSS)** on
@@ -113,7 +113,7 @@ rather the phone never changed. Colour is only held where there is something to 
 article with images, an extracted page with images, an HTML newsletter. A text-only article never
 touches the setting.
 
-The mechanism is a straight port of `ColorMode` from [LightCamera](https://github.com/gi-os/LightCamera),
+The mechanism is a straight port of `ColorMode` from [LightCamera](https://github.com/gi-os/Roll),
 itself a port of LightChat's — the reference counting and foreground handling are load-bearing and
 were arrived at the hard way. Two things differ because this is an SDK tool rather than an app: the
 `android.content.Context` import and the `contentResolver` access are blocked by the SDK build
@@ -316,3 +316,21 @@ and `lightphone/light-sdk` history.
 ## License
 
 MIT, the same as upstream. See [LICENSE](LICENSE).
+
+<!-- bright-footer:begin -->
+---
+
+## Bright\*
+
+*RSS, Atom and Gmail newsletters in one reader, authenticating against Google with no Play Services to do it through.*
+
+26 open-source apps for the **Light Phone III** — camera, music, maps, messages,
+reading, transit, games. The phone has no app store, so they install by sideload: scan one
+code from **[brightmarket.gzl.dev](https://brightmarket.gzl.dev)** and BrightMarket keeps them updated.
+
+[Roll](https://github.com/gi-os/Roll) · [BrightMusic](https://github.com/gi-os/BrightMusic) · [BrightWay](https://github.com/gi-os/BrightWay) · [BrightChat](https://github.com/gi-os/BrightChat) · [BrightControl](https://github.com/gi-os/BrightControl) · [BrightRemote](https://github.com/gi-os/BrightRemote) · [browse all 26 →](https://brightmarket.gzl.dev)
+
+The Light Phone does not sponsor or endorse any of these. Built by
+[Giovanni Lupo](https://github.com/gi-os) — if this one is useful to you, a ⭐ helps the next
+person find it.
+<!-- bright-footer:end -->
