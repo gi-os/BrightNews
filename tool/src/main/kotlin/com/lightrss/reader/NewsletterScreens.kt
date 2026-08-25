@@ -458,9 +458,17 @@ class NewsletterReaderScreen(
                                 onClick = viewModel::toggleRead,
                             ),
                             LightBarButton.LightIcon(
-                                icon = LightIcons.DELETE,
-                                onClick = { viewModel.archive { goBack() } },
-                                contentDescription = "Archive",
+                                icon = if (article?.isArchived == true) {
+                                    LightIcons.LOOP
+                                } else {
+                                    LightIcons.DELETE
+                                },
+                                onClick = { viewModel.toggleArchived { goBack() } },
+                                contentDescription = if (article?.isArchived == true) {
+                                    "Restore from archive"
+                                } else {
+                                    "Archive"
+                                },
                             ),
                         ),
                     )
@@ -620,6 +628,11 @@ class MailboxScreen(
                 }
                 LightBottomBar(
                     items = listOf(
+                        LightBarButton.LightIcon(
+                            icon = LightIcons.DELETE,
+                            onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
+                            contentDescription = "Archive",
+                        ),
                         LightBarButton.LightIcon(LightIcons.REFRESH, onClick = viewModel::refresh),
                     ),
                 )

@@ -136,10 +136,12 @@ class NewsletterReaderViewModel(
         viewModelScope.launch(Dispatchers.IO) { repository.setRead(articleId, !current.isRead) }
     }
 
-    fun archive(onArchived: () -> Unit) {
+    /** Archive it, or take it back out — the same rule as the RSS reader's row. */
+    fun toggleArchived(onArchived: () -> Unit) {
+        val archived = article.value?.article?.isArchived ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            repository.setArchived(articleId, true)
-            withContext(Dispatchers.Main) { onArchived() }
+            repository.setArchived(articleId, !archived)
+            if (!archived) withContext(Dispatchers.Main) { onArchived() }
         }
     }
 }

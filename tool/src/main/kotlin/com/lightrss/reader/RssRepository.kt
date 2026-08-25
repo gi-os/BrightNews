@@ -269,6 +269,7 @@ class RssRepository(
     }
 
     fun observeStarred(): Flow<List<ArticleRow>> = dao.observeStarred()
+    fun observeArchived(): Flow<List<ArticleRow>> = dao.observeArchived()
     fun observeFeeds(source: String? = null): Flow<List<FeedRow>> = dao.observeFeeds(source)
     fun observeFeed(feedId: Long): Flow<FeedEntity?> = dao.observeFeed(feedId)
     fun observeFeedArticles(feedId: Long): Flow<List<ArticleRow>> = dao.observeFeedArticles(feedId)
@@ -474,6 +475,9 @@ class RssRepository(
 
     suspend fun setStarred(articleId: String, isStarred: Boolean) = dao.setStarred(articleId, isStarred)
     suspend fun setArchived(articleId: String, isArchived: Boolean) = dao.setArchived(articleId, isArchived)
+
+    /** Put the whole archive back, for when the hiding was the mistake. */
+    suspend fun unarchiveAll() = dao.unarchiveAll()
 
     suspend fun markFeedRead(feedId: Long) {
         dao.markFeedRead(feedId)

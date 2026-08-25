@@ -184,6 +184,22 @@ interface RssDao {
     )
     fun observeStarred(): Flow<List<ArticleRow>>
 
+    /**
+     * The archive: everything hidden from the lists, newest first.
+     *
+     * Archiving hides an article, it never deleted one — but until this query there was no
+     * screen that could see a hidden row, which made a mis-tap indistinguishable from a delete.
+     */
+    @Query(
+        """
+        SELECT a.*, f.title AS feedTitle
+        FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE a.isArchived = 1
+        ORDER BY a.publishedAt DESC, a.insertedAt DESC
+        """,
+    )
+    fun observeArchived(): Flow<List<ArticleRow>>
+
     @Query(
         """
         SELECT a.*, f.title AS feedTitle
@@ -355,6 +371,9 @@ interface RssDao {
     @Query("UPDATE articles SET isArchived = :isArchived WHERE id = :articleId")
     suspend fun setArchived(articleId: String, isArchived: Boolean)
 
+    @Query("UPDATE articles SET isArchived = 0 WHERE isArchived = 1")
+    suspend fun unarchiveAll()
+
     @Query("UPDATE articles SET isRead = 1 WHERE feedId = :feedId")
     suspend fun markFeedRead(feedId: Long)
 
@@ -436,10 +455,13 @@ interface RssDao {
     suspend fun markUnreadIn(ids: List<String>)
 
     /**
-     * Drop newsletters that are no longer in the label — but never one the reader saved, or
-     * one still holding a read Gmail has not accepted. Bodies go with them, by cascade.
+     * Drop newsletters that are no longer in the label — but never one the reader saved, one
+     * they archived, or one still holding a read Gmail has not accepted. Bodies go with them,
+     * by cascade.
      */
-    @Query("DELETE FROM articles WHERE id IN (:ids) AND isStarred = 0 AND pendingRead = 0")
+    @Query(
+        "DELETE FROM articles WHERE id IN (:ids) AND isStarred = 0 AND isArchived = 0 AND pendingRead = 0",
+    )
     suspend fun deleteStaleNewsletters(ids: List<String>)
 
     /**
@@ -525,13 +547,15 @@ interface RssDao {
 
     /**
      * Keep the newest [keep] issues of one label; a year of dailies would fill the phone.
-     * Saved items and unpushed reads are exempt — dropping either loses something silently.
+     * Saved items, archived items and unpushed reads are exempt — dropping any of them loses
+     * something silently, and the archive is meant to be the one place a hidden issue survives.
      * Bodies go with them, by cascade.
      */
     @Query(
         """
         DELETE FROM articles
-        WHERE feedId = :feedId AND isStarred = 0 AND pendingRead = 0 AND id NOT IN (
+        WHERE feedId = :feedId AND isStarred = 0 AND isArchived = 0 AND pendingRead = 0
+          AND id NOT IN (
             SELECT id FROM articles WHERE feedId = :feedId
             ORDER BY publishedAt DESC, insertedAt DESC LIMIT :keep
         )

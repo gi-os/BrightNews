@@ -3,7 +3,7 @@
 Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,
 Gmail newsletters in the other, both read in the same reader. Built on the Light SDK; tool
 id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and search stay on
-the phone. Current release: **v2.4.0** (`tool/lighttool.toml`: versionCode 22).
+the phone. Current release: **v2.6.0** (`tool/lighttool.toml`: versionCode 25).
 
 ## Install via BrightMarket
 
@@ -191,6 +191,11 @@ git push origin v1.13.0                        # runs release.yml, publishes the
   markup; 1x1 tracking beacons, `data:` URIs and known tracking hosts are dropped.
   Lazy, on-screen-row-only downloads into an 8 MB memory cache / 24 MB disk cache. A
   Settings switch disables the whole feature.
+- **Archiving is not deleting.** **ARCHIVE** takes an article out of every list; the
+  **Archive** button in the Subscriptions and Mailbox bars still shows it. Open one and the
+  reader's own row reads **RESTORE**, or use **RESTORE ALL** to undo a sweep. Archived items
+  are also exempt from the newsletter trim, the way saved ones are, so hiding an issue is never
+  what loses it.
 - **Reader mode.** **OPEN** fetches the linked article and renders it with no WebView —
   no script, ad or tracking pixel loads. If a site answers with a bot check or a
   paywall, **SIGN IN** opens that one page in the app's only WebView, keeps the cookies
@@ -270,6 +275,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v2.6.0  | —         | The archive is a place you can look. Archived articles are listed, restorable one at a time or all at once, and no longer trimmed away |
 | v2.3.0  | —         | Pictures show in colour on a phone that stays grey, via the daltonizer and a one-time adb grant |
 | v2.2.0  | —         | Images keep their colour. The app no longer flattens them; the phone's own daltonizer does that, and can be switched off |
 | v2.1.0  | —         | The newsletter reader's bars get out of the way while you read forwards, and come back on any scroll up |

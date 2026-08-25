@@ -310,6 +310,21 @@ class SavedViewModel(repository: RssRepository) : LightViewModel<Unit>() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
 
+/**
+ * The archive list.
+ *
+ * Archiving was always reversible in the database and never reversible in the app — nothing
+ * queried a hidden row. This is the other half: the hidden articles, and the two ways back.
+ */
+class ArchiveViewModel(private val repository: RssRepository) : LightViewModel<Unit>() {
+    val articles: StateFlow<List<ArticleRow>> = repository.observeArchived()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun restoreAll() {
+        viewModelScope.launch(Dispatchers.IO) { repository.unarchiveAll() }
+    }
+}
+
 data class SearchUiState(
     val editorOpen: Boolean = true,
     val editorSession: Int = 0,
@@ -355,10 +370,18 @@ class ReaderViewModel(
         viewModelScope.launch(Dispatchers.IO) { repository.setRead(articleId, !current.isRead) }
     }
 
-    fun archive(onArchived: () -> Unit) {
+    /**
+     * Archive it, or take it back out of the archive.
+     *
+     * Archiving leaves the reader, because the point of it is to get the article out of the way.
+     * Restoring stays, so the row flipping back to ARCHIVE is the confirmation — and an
+     * accidental archive is undone from the same row that caused it.
+     */
+    fun toggleArchived(onArchived: () -> Unit) {
+        val archived = article.value?.article?.isArchived ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            repository.setArchived(articleId, true)
-            withContext(Dispatchers.Main) { onArchived() }
+            repository.setArchived(articleId, !archived)
+            if (!archived) withContext(Dispatchers.Main) { onArchived() }
         }
     }
 }

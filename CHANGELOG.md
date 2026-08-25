@@ -4,6 +4,25 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 2.6.0 - 2026-08-25
+
+### Added
+
+- An **Archive** screen, reached from the Subscriptions and Mailbox bars, listing every archived
+  article. Archiving hid an article from all four lists and nothing could see a hidden row again,
+  so an accidental archive was indistinguishable from a delete.
+- **RESTORE ALL** in the archive's bar, for undoing a sweep rather than one mis-tap.
+
+### Changed
+
+- The archive action in both readers is a toggle. Archiving still leaves the reader; opening an
+  archived article shows **RESTORE** (RSS) or a restore icon (newsletters) in the same place the
+  archive action was.
+- Archived newsletters are exempt from the per-label trim and from the stale-issue cleanup, the
+  way saved ones already were. Hiding an issue no longer puts it in line to be dropped.
+- The "all caught up" empty state no longer calls the read pile "the archive", now that the
+  archive is a real screen.
+
 ### Changed
 
 - Prepared repository documentation, privacy and security disclosures, screenshots, and trusted CI for public release.

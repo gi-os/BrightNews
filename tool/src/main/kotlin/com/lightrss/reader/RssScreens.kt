@@ -203,7 +203,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         newsletters -> "No issues downloaded yet.\n\nRefresh from the mailbox."
         favoritesOnly && favoriteCount == 0 ->
             "No favorite feeds yet.\n\nStar a feed in Subscriptions, or switch back to all feeds."
-        unreadOnly -> "You’re all caught up.\n\nSwitch the filter to revisit the archive."
+        unreadOnly -> "You’re all caught up.\n\nSwitch the filter to see everything again."
         else -> "No articles yet.\n\nRefresh or add a subscription."
     }
 }
@@ -327,6 +327,11 @@ class FeedsScreen(
                             icon = LightIcons.STAR_OUTLINE,
                             onClick = { navigateTo({ SavedScreen(it, repository) }) },
                             contentDescription = "Saved articles",
+                        ),
+                        LightBarButton.LightIcon(
+                            icon = LightIcons.DELETE,
+                            onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
+                            contentDescription = "Archive",
                         ),
                         LightBarButton.LightIcon(
                             icon = LightIcons.SETTINGS,
@@ -675,6 +680,61 @@ class SavedScreen(
     }
 }
 
+/**
+ * The archive.
+ *
+ * Archiving hides an article from every list, and for as long as no screen could see a hidden
+ * row that was indistinguishable from deleting it — a mis-tap took the article for good. This is
+ * that screen: everything hidden, newest first, opened in the same reader as anything else.
+ * Restoring one is a row in the reader; restoring the lot is the button in the bar, which is what
+ * an accidental archive actually needs.
+ */
+class ArchiveScreen(
+    sealedActivity: SealedLightActivity,
+    private val repository: RssRepository,
+) : LightScreen<Unit, ArchiveViewModel>(sealedActivity) {
+    override val viewModelClass: Class<ArchiveViewModel> = ArchiveViewModel::class.java
+    override fun createViewModel() = ArchiveViewModel(repository)
+
+    @Composable
+    override fun Content() {
+        val colors by LightThemeController.colors.collectAsState()
+        val articles by viewModel.articles.collectAsState()
+        val imageStore = rememberImageStore(repository)
+        WheelKeys()
+        LightTheme(colors = colors) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(LightThemeTokens.colors.background),
+            ) {
+                LightTopBar(
+                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                    center = LightTopBarCenter.Text("Archive"),
+                )
+                ArticleList(
+                    articles = articles,
+                    emptyMessage = "Nothing archived.\n\nArchiving hides an article from your " +
+                        "lists and keeps it here.",
+                    onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
+                    modifier = Modifier.weight(1f),
+                    imageStore = imageStore,
+                )
+                if (articles.isNotEmpty()) {
+                    LightBottomBar(
+                        items = listOf(
+                            LightBarButton.Text(
+                                text = "RESTORE ALL",
+                                onClick = viewModel::restoreAll,
+                            ),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
 class SearchScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
@@ -855,9 +915,15 @@ class ReaderScreen(
                                 },
                                 onClick = viewModel::toggleRead,
                             )
-                            SettingsRow("ARCHIVE", "Hide it from every list") {
-                                viewModel.archive { goBack() }
-                            }
+                            SettingsRow(
+                                title = if (article.isArchived) "RESTORE" else "ARCHIVE",
+                                detail = if (article.isArchived) {
+                                    "Put it back in your lists"
+                                } else {
+                                    "Hide it from your lists — the Archive keeps it"
+                                },
+                                onClick = { viewModel.toggleArchived { goBack() } },
+                            )
                         }
                     }
                 }
