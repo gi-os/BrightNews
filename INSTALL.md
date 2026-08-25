@@ -3,8 +3,14 @@
 Light RSS is not in Light's Tool Library. It is a community build you install yourself, either
 once over `adb` or continuously through [Obtainium](https://github.com/ImranR98/Obtainium).
 
-Every release is an APK attached to a [GitHub Release](https://github.com/gi-os/LightRSS/releases),
+Every release is an APK attached to a [GitHub Release](https://github.com/gi-os/BrightNews/releases),
 built by CI from a tagged commit and signed with a personal sideload key.
+
+The tool is called **News** from 2.0.0 — the same reader, with a newsletters section alongside the
+feeds. The APK keeps the `LightRSS-` prefix so existing Obtainium filters and update tracking keep
+working, and the signing key is unchanged, so 2.x installs over 1.x and keeps your subscriptions,
+saved articles and read state. The repository was renamed from `LightRSS` to `BrightNews`; the old
+URLs redirect.
 
 ## Before you start
 
@@ -47,7 +53,7 @@ Every other screen works without the camera; only scan-to-subscribe needs it.
 
 ## Making a code to scan
 
-[gi-os.github.io/LightRSS](https://gi-os.github.io/LightRSS) turns a feed or website address into
+[gi-os.github.io/BrightNews](https://gi-os.github.io/BrightNews) turns a feed or website address into
 a QR code in the browser. Open it on a laptop, paste the address, and scan the screen with
 **Subscriptions → + → Scan QR code**.
 
@@ -57,7 +63,7 @@ a QR code in the browser. Open it on a laptop, paste the address, and scan the s
 2. Paste the repository URL:
 
    ```
-   https://github.com/gi-os/LightRSS
+   https://github.com/gi-os/BrightNews
    ```
 
 3. Source is detected as GitHub. The defaults are fine; two settings worth setting:

@@ -4,6 +4,33 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 2.6.1 - 2026-08-25
+
+### Fixed
+
+- **Clear read articles** deleted the archive. The query exempted starred articles and nothing
+  else, while every other delete in the reader also exempted archived rows and reads Gmail had
+  not accepted yet. It now carries both, so the screen v2.6.0 added is no longer emptied by a
+  settings row that says it keeps your subscriptions.
+- **Mark all read** marked archived articles read, which is what made them eligible for that
+  delete. It now skips them, matching every list query in the DAO. Gmail's own read state still
+  reconciles onto archived issues; it is only the bulk catch-up that leaves them alone. Marking
+  a single feed read had the same problem and got the same clause.
+- Newsletter iframes were only removed when images were switched off, so with images on — the
+  default — an issue could pull an arbitrary remote document into the reader's WebView and
+  confirm the open that the tracking-pixel strip is there to deny. `iframe`, `object` and
+  `embed` are now removed in both modes.
+- Signing out of Gmail left Google's session cookies behind, so the next sign-in silently
+  reconnected the account that had just left. Sign-out and "forget client" clear them.
+
+### Changed
+
+- The confirmation copy for both settings rows names what actually survives.
+- A `check` workflow compiles and tests every branch and pull request. `main` is the default
+  branch again; the `images-and-qr` branch it had drifted to is gone, and with it the chance of
+  a commit reaching the default branch with no CI at all.
+- Release notes link the repository under its current name.
+
 ## 2.6.0 - 2026-08-25
 
 ### Added

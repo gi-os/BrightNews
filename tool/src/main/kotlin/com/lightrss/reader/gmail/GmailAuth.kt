@@ -1,6 +1,7 @@
 package com.lightrss.reader.gmail
 
 import android.util.Base64
+import android.webkit.CookieManager
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -8,11 +9,13 @@ import io.ktor.client.request.forms.submitForm
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.Parameters
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URI
@@ -284,6 +287,7 @@ class GmailAuth(private val store: AuthStore) {
 
     suspend fun signOut() {
         lock.withLock { clearTokens() }
+        clearWebSession()
         refreshState()
     }
 
@@ -303,7 +307,36 @@ class GmailAuth(private val store: AuthStore) {
             clearTokens()
             listOf(KEY_CLIENT_ID, KEY_CLIENT_SECRET, KEY_REDIRECT).forEach { store.write(it, null) }
         }
+        clearWebSession()
         refreshState()
+    }
+
+    /**
+     * Drop the Google session the consent WebView left behind.
+     *
+     * Throwing the tokens away is not signing out. Consent runs in a WebView this process owns,
+     * with cookies accepted (see `GmailSignInScreen`), so Google's own session cookies outlive
+     * the refresh token — and the next sign-in walks straight past the account chooser back into
+     * the account that just left. That is the wrong account's mail on somebody's phone, and it
+     * looks like the sign-out silently failed.
+     *
+     * There is no per-domain removal in [CookieManager], so this takes the whole jar. That is
+     * safe here: the reader's per-host RSS sign-ins are not kept in it — they are stored in
+     * `app_metadata` and sent as an explicit Cookie header, see
+     * [com.lightrss.reader.RssRepository.setSiteAccess].
+     *
+     * [CookieManager] takes no Context, but it does need the WebView provider, which is only
+     * safe to bring up on the main thread. A device with no usable WebView must not turn sign-out
+     * into a crash either, so a failure here is swallowed: the tokens are already gone.
+     */
+    private suspend fun clearWebSession() {
+        withContext(Dispatchers.Main) {
+            runCatching {
+                val cookies = CookieManager.getInstance()
+                cookies.removeAllCookies(null)
+                cookies.flush()
+            }
+        }
     }
 
     private suspend fun clearTokens() {

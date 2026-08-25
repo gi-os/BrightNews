@@ -274,4 +274,38 @@ class NewsletterHtmlTest {
         assertEquals("Weekly", out.lineSequence().first())
         assertContains(out, "Money Stuff · 1 Aug")
     }
+
+    @Test
+    fun `iframes are removed with images on, not only with images off`() {
+        // The unconditional strip used to cover scripts and stylesheets but not frames, and the
+        // frame removal sat on the images-off branch — so with images on, which is the default,
+        // a sender could load any remote document they liked into the reader's WebView and get
+        // the open confirmation the beacon strip is there to deny.
+        val html = """
+            <html><body>
+              <iframe src="https://track.example/frame"></iframe>
+              <object data="https://track.example/o.swf"></object>
+              <embed src="https://track.example/e.svg">
+              <p>Body</p>
+            </body></html>
+        """.trimIndent()
+
+        val out = NewsletterHtml.rewrite(html, RenderMode.DARK, loadImages = true)
+
+        assertFalse("<iframe" in out, "an iframe survived with images on")
+        assertFalse("<object" in out, "an object survived with images on")
+        assertFalse("<embed" in out, "an embed survived with images on")
+        assertFalse("track.example" in out, "a remote frame target survived")
+        assertContains(out, "Body")
+    }
+
+    @Test
+    fun `iframes are still removed with images off`() {
+        val html = """<html><body><iframe src="https://track.example/frame"></iframe><p>Body</p></body></html>"""
+
+        val out = NewsletterHtml.rewrite(html, RenderMode.PAPER, loadImages = false)
+
+        assertFalse("<iframe" in out)
+        assertContains(out, "Body")
+    }
 }

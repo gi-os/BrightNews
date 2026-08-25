@@ -124,7 +124,7 @@ foreground handling comes off the screen's own lifecycle instead.
 ## Quick start
 
 ```sh
-git clone https://github.com/gi-os/LightRSS.git
+git clone https://github.com/gi-os/BrightNews.git
 cd LightRSS
 export JAVA_HOME="<path-to-jdk-17>"
 export ANDROID_HOME="<path-to-android-sdk>"
@@ -141,7 +141,7 @@ commit either. The debug APK lands in `tool/build/outputs/apk/debug/`.
 To sideload immediately without building, grab a release APK instead:
 
 ```sh
-adb install -r LightRSS-<version>.apk   # from github.com/gi-os/LightRSS/releases
+adb install -r LightRSS-<version>.apk   # from github.com/gi-os/BrightNews/releases
 ```
 
 or track the repo in [Obtainium](https://github.com/ImranR98/Obtainium).
@@ -182,7 +182,7 @@ git push origin v1.13.0                        # runs release.yml, publishes the
 - **Subscribing.** Subscriptions → **+** → paste a URL, use the on-screen keyboard, or
   **Scan QR code**. The scanner accepts a bare URL, a `feed://`/`rss://` scheme, or a
   code that wraps an address inside other text.
-  [gi-os.github.io/LightRSS](https://gi-os.github.io/LightRSS) generates a matching code
+  [gi-os.github.io/BrightNews](https://gi-os.github.io/BrightNews) generates a matching code
   from any feed or site address, client-side.
 - **Images** (this fork's main addition). A thumbnail per article row and full-width
   images in the reader, downsampled to the width the panel needs and shown **in colour** — see

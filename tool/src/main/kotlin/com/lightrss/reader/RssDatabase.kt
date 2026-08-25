@@ -374,10 +374,19 @@ interface RssDao {
     @Query("UPDATE articles SET isArchived = 0 WHERE isArchived = 1")
     suspend fun unarchiveAll()
 
-    @Query("UPDATE articles SET isRead = 1 WHERE feedId = :feedId")
+    /**
+     * Catch up on one feed.
+     *
+     * Archived rows are exempt, the same way every list query in this file skips them. They are
+     * not in the unread count and not in any list, so flipping them changes nothing a reader can
+     * see — but it does make them read, and a read row is what [deleteReadUnstarred] deletes.
+     * That chain is how "clear read articles" used to empty the archive.
+     */
+    @Query("UPDATE articles SET isRead = 1 WHERE feedId = :feedId AND isArchived = 0")
     suspend fun markFeedRead(feedId: Long)
 
-    @Query("UPDATE articles SET isRead = 1")
+    /** Catch up on everything. Archived rows are exempt; see [markFeedRead]. */
+    @Query("UPDATE articles SET isRead = 1 WHERE isArchived = 0")
     suspend fun markAllRead()
 
     /**
@@ -401,7 +410,17 @@ interface RssDao {
     )
     suspend fun queueNewsletterReads(feedId: Long?)
 
-    @Query("DELETE FROM articles WHERE isRead = 1 AND isStarred = 0")
+    /**
+     * "Clear read articles" — local copies only, and never something the reader kept.
+     *
+     * Saved, archived and unpushed-read rows are all exempt, matching [deleteStaleNewsletters]
+     * and [trimNewsletters]. This query used to carry only the starred exemption, so it took the
+     * whole archive with it and any read Gmail had not accepted yet — a settings row that says it
+     * keeps your subscriptions quietly deleting the one place a hidden issue survives.
+     */
+    @Query(
+        "DELETE FROM articles WHERE isRead = 1 AND isStarred = 0 AND isArchived = 0 AND pendingRead = 0",
+    )
     suspend fun deleteReadUnstarred()
 
     @Query("DELETE FROM feeds WHERE id = :feedId")

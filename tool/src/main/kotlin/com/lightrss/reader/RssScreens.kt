@@ -1101,22 +1101,24 @@ class SettingsScreen(
                     ) {
                         viewModel.setColourEnabled(!colourEnabled)
                     }
-                    SettingsRow("MARK ALL READ", "Keep saved articles and history") {
+                    SettingsRow("MARK ALL READ", "Leaves saved and archived articles alone") {
                         navigateTo({
                             ConfirmationScreen(
                                 it,
-                                message = "Mark every article as read?\n\nSaved items and history will stay.",
+                                message = "Mark every article as read?\n\nSaved and archived articles are not touched.",
                                 confirmLabel = "MARK READ",
                             )
                         }) { confirmed ->
                             if (confirmed) viewModel.markAllRead()
                         }
                     }
-                    SettingsRow("CLEAR READ ARTICLES", "Remove local copies except saved items") {
+                    SettingsRow("CLEAR READ ARTICLES", "Removes local copies, keeps saved and archived") {
                         navigateTo({
                             ConfirmationScreen(
                                 it,
-                                message = "Clear every read article that is not saved?\n\nSubscriptions and starred articles will stay.",
+                                message = "Clear every read article that is not saved?\n\n" +
+                                    "Subscriptions stay. Saved and archived articles stay, and so " +
+                                    "does anything still waiting to be marked read in Gmail.",
                                 confirmLabel = "CLEAR",
                             )
                         }) { confirmed ->

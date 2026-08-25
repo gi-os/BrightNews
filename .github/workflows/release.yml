@@ -105,14 +105,12 @@ jobs:
           body: |
             Sideload build of News ${{ env.VERSION_NAME }} (versionCode ${{ env.VERSION_CODE }}) for the Light Phone III.
 
-            The app is called News from 2.0.0 — it is the same tool, now with a newsletters section
-            alongside the feeds. The APK keeps the LightRSS- prefix so existing Obtainium filters and
-            update tracking keep working, and the signing key is unchanged, so this installs over 1.x
-            and keeps your subscriptions, saved articles and read state.
+            The APK keeps the LightRSS- prefix so existing Obtainium filters and update tracking
+            keep working, and the signing key is unchanged.
 
             Install with `adb install -r LightRSS-${{ env.VERSION_NAME }}.apk`, or track this repository in
             [Obtainium](https://github.com/ImranR98/Obtainium) to get updates automatically. See
-            [INSTALL.md](https://github.com/gi-os/LightRSS/blob/main/INSTALL.md).
+            [INSTALL.md](https://github.com/gi-os/BrightNews/blob/main/INSTALL.md).
 
             This APK is signed with a personal sideload key, not by Light. Updates must come from this
             same repository; an APK signed with a different key cannot install over it.

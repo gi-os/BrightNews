@@ -1,27 +1,34 @@
-# News 2.6.0
+# News 2.6.1
 
-Archiving an article no longer loses it.
+**Clear read articles no longer empties the archive.**
 
-The archive flag has been in the database since the fork, and nothing ever deleted an archived
-article — but no screen queried a hidden row, so there was no way back to one. Archive by mistake
-and the article was gone as far as the app was concerned, which is the same thing as gone.
+The settings row promised to keep your subscriptions and your saved articles, and it kept both.
+What it did not say is that it also deleted every archived article — the ones v2.6.0 had just
+given you a screen to find again — along with any newsletter you had read offline that Gmail had
+not been told about yet. Two clauses were missing from one line of SQL. Every other delete in the
+reader already carried them.
 
-There is now an **Archive** screen. It lists every archived article, newest first, from both
-sections, and it opens them in the same reader as anything else. Reach it from the **Archive**
-button in the Subscriptions bar or the Mailbox bar, next to Saved and Refresh.
+Two changes fix it. The delete now exempts archived articles and unpushed reads, the way it
+already exempted saved ones. And **Mark all read** no longer flips archived articles to read,
+which is what put them in the delete's path in the first place: an archived article is in no list
+and in no unread count, so marking it read changed nothing you could see and everything about
+what happened next. Reading state on archived articles is unchanged otherwise — Gmail's own read
+state still reconciles onto them.
 
-Getting an article back happens in two places. Open one from the archive and the row at the end of
-the article reads **RESTORE** instead of **ARCHIVE** — the same row that hid it puts it back, and
-the reader stays put so the row flipping back is the confirmation. In the newsletter reader the
-bar's archive icon does the same thing. For a sweep rather than a single mis-tap, **RESTORE ALL**
-in the archive's bottom bar empties the archive back into the lists.
+The confirmation screens say what actually happens now, rather than listing two of the four things
+that survive.
 
-One quieter fix behind it. Archived newsletters were still subject to the per-label trim that keeps
-the newest issues and to the cleanup that drops issues Gmail no longer lists, so an archived issue
-could disappear on a later sync even with a screen to view it from. Archived items are now exempt
-from both, the way saved items already were. The trim keeps the phone from filling up with a year
-of dailies; things you deliberately kept are not what it should be spending.
+**Newsletters can no longer embed a frame.** The renderer stripped scripts, stylesheets and
+open-rate beacons from every issue, but it only removed iframes when images were turned off — and
+images are on by default. A sender could load a document of their choosing into the reader and get
+back exactly the open confirmation the beacon strip exists to deny. Frames, objects and embeds now
+go with the scripts, in both modes.
 
-Nothing about the database schema changed, so this installs over 2.5.0 and keeps every
-subscription, label, read state and saved article. Anything you archived before this release is
-already in the archive waiting — the rows were never gone, only unreachable.
+**Signing out of Gmail signs you out of Google.** Consent runs in a WebView this app owns, so
+Google's session cookies were outliving the tokens: sign out, sign back in, and the account
+chooser was skipped and the previous account was reconnected without ever asking. Sign-out and
+"forget client" now clear those cookies too.
+
+Nothing about the database schema changed, so this installs over 2.6.0 and keeps every
+subscription, label, read state and saved article. Anything already lost to the old delete is
+gone; anything still in the archive is now safe from it.

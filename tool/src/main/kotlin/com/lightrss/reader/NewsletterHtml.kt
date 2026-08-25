@@ -56,7 +56,15 @@ object NewsletterHtml {
 
         // base[href] has to go: it would re-anchor every relative URL and every in-document
         // anchor, and the reader decides internal-vs-external by comparing against its own base.
-        doc.select("script, noscript, link[rel=stylesheet], meta[http-equiv=refresh], base").remove()
+        //
+        // iframe, object and embed go unconditionally, not just on the images-off branch where
+        // they used to live. Each one fetches a whole remote document of the sender's choosing
+        // into this WebView, which hands back the load confirmation the tracking-pixel strip two
+        // lines below exists to deny — and does it with images on, which is the default.
+        doc.select(
+            "script, noscript, link[rel=stylesheet], meta[http-equiv=refresh], base, " +
+                "iframe, object, embed",
+        ).remove()
         stripTrackingPixels(doc)
         unpinWidths(doc)
         // Anything still pointing at a MIME part missed the inlining pass and can never load,
@@ -65,7 +73,7 @@ object NewsletterHtml {
         if (blockAds) stripAds(doc)
 
         if (!loadImages) {
-            doc.select("img, picture, source, video, iframe").remove()
+            doc.select("img, picture, source, video").remove()
         } else {
             // Remote images are fine but must never be load-blocking-wide.
             doc.select("img").forEach { it.attr("loading", "lazy") }
