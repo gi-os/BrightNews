@@ -1,3 +1,5 @@
+<img src="docs/icon.png" alt="" width="72" align="left" />
+
 # News
 
 Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,

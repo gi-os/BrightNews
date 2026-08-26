@@ -1,86 +1,186 @@
 #!/usr/bin/env python3
-"""Draw the launcher icon: a single white letter on black, matching the other Light tools.
+"""Build BrightNews's launcher mark.
 
-    python3 scripts/generate_icon.py            # defaults to R, for RSS
-    python3 scripts/generate_icon.py --letter S --font /path/to/PublicSans-Regular.ttf
+Part of the unified Bright* icon set. Every mark in the collection is drawn on
+the same 108x108 adaptive-icon canvas, inside the same 18..90 safe zone, at the
+same two stroke weights, in white on black and nothing else. The Light Phone
+III panel is black and white; a mark with a mid-tone in it dithers.
 
-Writes plain bitmap mipmaps into tool/src/main/res. Deliberately no adaptive icon: tools that
-read an app's icon out of the package, Obtainium among them, hand back nothing when the icon
-resolves to an AdaptiveIconDrawable rather than a bitmap. Public Sans is the face used
-by the sibling tools; it is not vendored here, so pass --font to reproduce exactly. Without it the
-script falls back to whatever DejaVu Sans the system has, which is close enough to re-render.
+Edit MARK below and re-run. The vector outputs need nothing but the standard
+library. The raster outputs need Pillow and cairosvg, and are skipped with a
+message if those are missing, because the vectors are what actually ship on
+API 26 and up.
+
+    python3 scripts/generate_icon.py
 """
 
-import argparse
 import os
-from PIL import Image, ImageDraw, ImageFont
+import re
 
-# Density buckets Android expects, and the launcher icon size in each.
-LEGACY_SIZES = {
-    "mipmap-mdpi": 48,
-    "mipmap-hdpi": 72,
-    "mipmap-xhdpi": 96,
-    "mipmap-xxhdpi": 144,
-    "mipmap-xxxhdpi": 192,
-}
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-FONT_CANDIDATES = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+# ---- the mark ---------------------------------------------------------------
+# Each entry is (path data, stroke width, even-odd fill). A stroke width of 0
+# means the path is filled instead of stroked.
+
+MARK = [
+    ('M27.00,30.00 H81.00 A3.00,3.00 0 0 1 84.00,33.00 V77.00 A3.00,3.00 0 0 1 81.00,80.00 H27.00 A3.00,3.00 0 0 1 24.00,77.00 V33.00 A3.00,3.00 0 0 1 27.00,30.00 Z', 5, False),
+    ('M30.00,36.00 H78.00 V43.00 H30.00 Z', 0, False),
+    ('M32.00,49.00 H50.00 A2.00,2.00 0 0 1 52.00,51.00 V72.00 A2.00,2.00 0 0 1 50.00,74.00 H32.00 A2.00,2.00 0 0 1 30.00,72.00 V51.00 A2.00,2.00 0 0 1 32.00,49.00 Z', 4, False),
+    ('M58,53 H78', 4, False),
+    ('M58,61 H78', 4, False),
+    ('M58,69 H78', 4, False),
 ]
 
+# Where the mark is written, and at what viewport. 108 is the adaptive-icon
+# canvas; 240 is the LightOS splash mark, which is the only place a LightOS
+# tool can show a mark of its own.
+TARGETS = [
 
-def load_font(path, size):
-    for candidate in [path] + FONT_CANDIDATES:
-        if candidate and os.path.exists(candidate):
-            return ImageFont.truetype(candidate, size)
-    raise SystemExit("No usable TrueType font found; pass --font")
+]
+
+# Legacy rasters: (path, pixels, circular mask, inset, transparent plate).
+# Inset shrinks the mark inside the plate - a legacy square icon gets no
+# launcher mask, so it needs the margin the mask would otherwise have given it.
+# A transparent plate is for an adaptive foreground layer, which is composited
+# over the plate rather than carrying one of its own.
+RASTERS = [
+    ('tool/src/main/res/mipmap-hdpi/ic_launcher.png', 72, False, 0.72, False),
+    ('tool/src/main/res/mipmap-hdpi/ic_launcher_round.png', 72, True, 0.72, False),
+    ('tool/src/main/res/mipmap-mdpi/ic_launcher.png', 48, False, 0.72, False),
+    ('tool/src/main/res/mipmap-mdpi/ic_launcher_round.png', 48, True, 0.72, False),
+    ('tool/src/main/res/mipmap-xhdpi/ic_launcher.png', 96, False, 0.72, False),
+    ('tool/src/main/res/mipmap-xhdpi/ic_launcher_round.png', 96, True, 0.72, False),
+    ('tool/src/main/res/mipmap-xxhdpi/ic_launcher.png', 144, False, 0.72, False),
+    ('tool/src/main/res/mipmap-xxhdpi/ic_launcher_round.png', 144, True, 0.72, False),
+    ('tool/src/main/res/mipmap-xxxhdpi/ic_launcher.png', 192, False, 0.72, False),
+    ('tool/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png', 192, True, 0.72, False),
+]
+
+# Files that are the same in every app: the black plate, and the adaptive-icon
+# wrapper that points the launcher at the plate and the mark.
+STATIC = [
+
+]
+
+STROKE = ('        android:fillColor="#00000000"\n'
+          '        android:strokeColor="#FFFFFF"\n'
+          '        android:strokeWidth="%g"\n'
+          '        android:strokeLineCap="round"\n'
+          '        android:strokeLineJoin="round" />')
+
+HEADER = '''<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BrightNews launcher mark. One of the unified Bright* set: 108 canvas, 18..90
+  safe zone, white on black, no greys and no colour anywhere.
+
+  Generated by scripts/generate_icon.py - edit the geometry there, not here.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="%(vp)sdp"
+    android:height="%(vp)sdp"
+    android:viewportWidth="%(vp)s"
+    android:viewportHeight="%(vp)s">
+%(paths)s
+</vector>
+'''
 
 
-def draw(letter, size, font_path, transparent, cap_fraction):
-    """One square icon. `cap_fraction` is the letter height as a share of the canvas."""
-    background = (0, 0, 0, 0) if transparent else (0, 0, 0, 255)
-    image = Image.new("RGBA", (size, size), background)
-    canvas = ImageDraw.Draw(image)
+def scale_path(d, k):
+    """Multiply every number in a path by k.
 
-    # Size the face so the letter's own bounding box, not its line height, fills the target.
-    target = size * cap_fraction
-    points = max(8, int(target * 1.35))
-    for _ in range(64):
-        font = load_font(font_path, points)
-        box = canvas.textbbox((0, 0), letter, font=font)
-        height = box[3] - box[1]
-        if height <= target or points <= 8:
-            break
-        points -= max(1, int(points * 0.04))
+    Safe on this data because every path is absolute and uniformly scaled, so
+    arc rx/ry scale with everything else. The large-arc and sweep flags are 0
+    or 1 and a naive pass would scale them into nonsense, so each arc command
+    is matched whole and its three flag fields copied through untouched."""
+    if k == 1.0:
+        return d
+    num = re.compile(r'-?\d*\.?\d+')
+    arc = re.compile(r'A\s*(-?[\d.]+)\s*,?\s*(-?[\d.]+)\s+(-?[\d.]+)\s+([01])\s*,?\s*([01])\s+')
 
-    font = load_font(font_path, points)
-    box = canvas.textbbox((0, 0), letter, font=font)
-    x = (size - (box[2] - box[0])) / 2 - box[0]
-    y = (size - (box[3] - box[1])) / 2 - box[1]
-    canvas.text((x, y), letter, font=font, fill=(255, 255, 255, 255))
-    return image
+    def one(s):
+        return ('%.3f' % (float(s) * k)).rstrip('0').rstrip('.')
 
+    def plain(s):
+        return num.sub(lambda m: one(m.group(0)), s)
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--letter", default="R", help="single character to draw")
-    parser.add_argument("--font", default=None, help="TrueType font to use")
-    parser.add_argument("--res", default="tool/src/main/res", help="resource directory")
-    args = parser.parse_args()
-
-    letter = args.letter.strip().upper()[:1] or "R"
-
-    for bucket, size in LEGACY_SIZES.items():
-        directory = os.path.join(args.res, bucket)
-        os.makedirs(directory, exist_ok=True)
-        icon = draw(letter, size, args.font, transparent=False, cap_fraction=0.62)
-        icon.save(os.path.join(directory, "ic_launcher.png"))
-        icon.save(os.path.join(directory, "ic_launcher_round.png"))
-
-    print(f"Wrote '{letter}' icons into {args.res}")
+    out, i = [], 0
+    for m in arc.finditer(d):
+        out.append(plain(d[i:m.start()]))
+        out.append('A%s,%s %s %s %s ' % (one(m.group(1)), one(m.group(2)),
+                                         m.group(3), m.group(4), m.group(5)))
+        i = m.end()
+    out.append(plain(d[i:]))
+    return ''.join(out)
 
 
-if __name__ == "__main__":
-    main()
+def render(vp):
+    k = vp / 108.0
+    body = []
+    for d, w, even in MARK:
+        pd = scale_path(d, k)
+        if w == 0:
+            ft = '\n        android:fillType="evenOdd"' if even else ''
+            body.append('    <path\n        android:pathData="%s"\n'
+                        '        android:fillColor="#FFFFFF"%s />' % (pd, ft))
+        else:
+            body.append('    <path\n        android:pathData="%s"\n%s'
+                        % (pd, STROKE % (w * k)))
+    return HEADER % {'vp': vp, 'paths': '\n'.join(body)}
+
+
+def svg(inset=1.0, transparent=False):
+    m = (1 - inset) * 54
+    s = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">']
+    if not transparent:
+        s.append('<rect width="108" height="108" fill="#000000"/>')
+    s += [
+         '<g transform="translate(%.3f,%.3f) scale(%s)">' % (m, m, inset)]
+    for d, w, even in MARK:
+        if w == 0:
+            fr = ' fill-rule="evenodd"' if even else ''
+            s.append('<path d="%s" fill="#FFFFFF"%s/>' % (d, fr))
+        else:
+            s.append('<path d="%s" fill="none" stroke="#FFFFFF" stroke-width="%s" '
+                     'stroke-linecap="round" stroke-linejoin="round"/>' % (d, w))
+    s.append('</g></svg>')
+    return ''.join(s)
+
+
+def write(rel, text):
+    p = os.path.join(ROOT, rel)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    open(p, 'w').write(text)
+    print('wrote', rel)
+
+
+def rasters():
+    try:
+        import io
+        import cairosvg
+        from PIL import Image, ImageDraw
+    except ImportError:
+        print('Pillow/cairosvg not installed - skipped the rasters. The adaptive '
+              'icon is what ships on API 26 and up.')
+        return
+    for rel, px, round_, inset, transparent in RASTERS:
+        raw = cairosvg.svg2png(bytestring=svg(inset, transparent).encode(),
+                               output_width=px * 4, output_height=px * 4)
+        im = Image.open(io.BytesIO(raw)).convert('RGBA')
+        if round_:
+            mask = Image.new('L', im.size, 0)
+            ImageDraw.Draw(mask).ellipse([0, 0, im.size[0] - 1, im.size[1] - 1], fill=255)
+            im.putalpha(mask)
+        im = im.resize((px, px), Image.LANCZOS)
+        p = os.path.join(ROOT, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        im.save(p, 'WEBP' if rel.endswith('.webp') else 'PNG')
+        print('wrote', rel)
+
+
+if __name__ == '__main__':
+    for rel, vp in TARGETS:
+        write(rel, render(vp))
+    for rel, text in STATIC:
+        write(rel, text)
+    rasters()
