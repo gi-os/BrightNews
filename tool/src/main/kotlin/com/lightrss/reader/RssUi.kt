@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import com.lightrss.reader.hw.WheelScroll
@@ -55,33 +56,75 @@ fun ArticleList(
         return
     }
     WheelScroll(listState)
+    val rowHeight = articleRowHeightGridUnits()
     LightLazyScrollView(
         modifier = modifier,
         listState = listState,
-        uniformItemHeightGridUnits = ARTICLE_ROW_HEIGHT,
+        uniformItemHeightGridUnits = rowHeight,
     ) {
         items(articles, key = { it.article.id }) { row ->
-            ArticleListRow(row, onOpen, imageStore)
+            ArticleListRow(row, onOpen, imageStore, rowHeight)
         }
     }
 }
+
+/**
+ * The height, in grid units, of a list row holding [titleLines] lines of paragraph type over one
+ * superfine line.
+ *
+ * These lists scroll in whole rows, so the scroll bar needs every row to be the same height, and
+ * that height has to hold the tallest thing a row can contain. Measuring it from the type tokens
+ * is not fussiness: text scales with the screen's height and a grid unit with its width, so the
+ * two do not move together and a hand-tuned number is only ever right on the screen it was tuned
+ * on. Both of these rows were tuned too short, and both of them clipped the same thing — the
+ * small line underneath, which is the one naming the feed the article came from.
+ */
+@Composable
+internal fun stackedRowHeightGridUnits(
+    titleLines: Int,
+    verticalPaddingUnits: Float,
+    gapUnits: Float,
+    minimumUnits: Float,
+): Float {
+    val density = LocalDensity.current
+    val typography = LightThemeTokens.typography
+    val gridUnit = 1f.gridUnitsAsDp()
+    val content = with(density) {
+        typography.paragraph.lineHeight.toDp() * titleLines +
+            typography.superfine.lineHeight.toDp() +
+            gridUnit * (gapUnits + 2 * verticalPaddingUnits)
+    }
+    return max(minimumUnits, content / gridUnit)
+}
+
+@Composable
+private fun articleRowHeightGridUnits(): Float = stackedRowHeightGridUnits(
+    titleLines = ARTICLE_TITLE_MAX_LINES,
+    verticalPaddingUnits = ROW_VERTICAL_PADDING_UNITS,
+    gapUnits = SOURCE_LINE_GAP_UNITS,
+    minimumUnits = ARTICLE_ROW_MIN_HEIGHT,
+)
 
 @Composable
 private fun ArticleListRow(
     row: ArticleRow,
     onOpen: (ArticleRow) -> Unit,
     imageStore: ArticleImageStore?,
+    heightGridUnits: Float,
 ) {
     val article = row.article
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(ARTICLE_ROW_HEIGHT.gridUnitsAsDp())
+            .height(heightGridUnits.gridUnitsAsDp())
             .lightClickable(
                 onClickLabel = if (article.isRead) "Open article" else "Open unread article",
                 role = Role.Button,
             ) { onOpen(row) }
-            .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.45f.gridUnitsAsDp()),
+            .padding(
+                horizontal = 1f.gridUnitsAsDp(),
+                vertical = ROW_VERTICAL_PADDING_UNITS.gridUnitsAsDp(),
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (imageStore != null && article.imageUrl.isNotBlank()) {
@@ -101,7 +144,7 @@ private fun ArticleListRow(
                     text = article.title,
                     variant = LightTextVariant.Paragraph,
                     lighten = article.isRead,
-                    maxLines = 2,
+                    maxLines = ARTICLE_TITLE_MAX_LINES,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
@@ -114,7 +157,7 @@ private fun ArticleListRow(
                     )
                 }
             }
-            Row(modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp())) {
+            Row(modifier = Modifier.padding(top = SOURCE_LINE_GAP_UNITS.gridUnitsAsDp())) {
                 LightText(
                     text = sourceLine(row),
                     variant = LightTextVariant.Superfine,
@@ -418,7 +461,10 @@ fun sourceHost(url: String): String = runCatching {
     URI(url).host.orEmpty().removePrefix("www.").uppercase(Locale.US)
 }.getOrDefault("")
 
-private const val ARTICLE_ROW_HEIGHT = 4.75f
+private const val ARTICLE_TITLE_MAX_LINES = 2
+private const val SOURCE_LINE_GAP_UNITS = 0.25f
+private const val ROW_VERTICAL_PADDING_UNITS = 0.45f
+private const val ARTICLE_ROW_MIN_HEIGHT = 4.75f
 private const val THUMBNAIL_WIDTH = 4.4f
 private const val THUMBNAIL_HEIGHT = 3.6f
 private const val READER_IMAGE_PLACEHOLDER = 6f

@@ -710,34 +710,47 @@ private fun LabelList(
         EmptyState("This mailbox has no labels.", modifier)
         return
     }
-    LightLazyScrollView(modifier = modifier, uniformItemHeightGridUnits = LABEL_ROW_HEIGHT) {
+    val rowHeight = stackedRowHeightGridUnits(
+        titleLines = LABEL_TITLE_MAX_LINES,
+        verticalPaddingUnits = LABEL_ROW_PADDING_UNITS,
+        gapUnits = LABEL_ROW_GAP_UNITS,
+        minimumUnits = LABEL_ROW_MIN_HEIGHT,
+    )
+    LightLazyScrollView(modifier = modifier, uniformItemHeightGridUnits = rowHeight) {
         items(labels, key = { it.id }) { label ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(LABEL_ROW_HEIGHT.gridUnitsAsDp())
+                    .height(rowHeight.gridUnitsAsDp())
                     .lightClickable(onClickLabel = label.name, role = Role.Button) { onPick(label) }
-                    .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.5f.gridUnitsAsDp()),
+                    .padding(
+                        horizontal = 1f.gridUnitsAsDp(),
+                        vertical = LABEL_ROW_PADDING_UNITS.gridUnitsAsDp(),
+                    ),
             ) {
                 LightText(
                     text = label.name,
                     variant = LightTextVariant.Paragraph,
-                    maxLines = 2,
+                    maxLines = LABEL_TITLE_MAX_LINES,
                     overflow = TextOverflow.Ellipsis,
                 )
                 LightText(
                     text = if (label.isUser) "YOUR LABEL" else "GMAIL",
                     variant = LightTextVariant.Superfine,
                     lighten = true,
-                    modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
+                    modifier = Modifier.padding(top = LABEL_ROW_GAP_UNITS.gridUnitsAsDp()),
                 )
             }
         }
     }
 }
 
-/** The scroll bar needs a fixed row height; two lines of Light type comes to this. */
-private const val LABEL_ROW_HEIGHT = 3.6f
+// The scroll bar needs every row the same height, and a label name is allowed two lines of it.
+// The height itself is measured in stackedRowHeightGridUnits; this is only its floor.
+private const val LABEL_TITLE_MAX_LINES = 2
+private const val LABEL_ROW_GAP_UNITS = 0.25f
+private const val LABEL_ROW_PADDING_UNITS = 0.5f
+private const val LABEL_ROW_MIN_HEIGHT = 3.6f
 
 /**
  * Google's consent page, in a WebView the tool owns.

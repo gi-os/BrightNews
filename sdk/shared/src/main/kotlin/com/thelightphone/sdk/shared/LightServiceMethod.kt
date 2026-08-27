@@ -6,7 +6,17 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
 
-val lightJson = Json { ignoreUnknownKeys = true }
+// A tool outlives the phone build it was compiled against, so both directions of the drift
+// have to be survivable. `ignoreUnknownKeys` covers a field the phone has learned to send;
+// `explicitNulls = false` covers the other half — a newer server omits a null field instead of
+// writing `null`, and to the decoder a nullable field with no default is still a *required*
+// field. Without this, a keyboard-options payload from a phone newer than the tool throws
+// MissingFieldException, and that throw lands on a screen that is only trying to draw a
+// keyboard. Every response below also carries a default for the same reason.
+val lightJson = Json {
+    ignoreUnknownKeys = true
+    explicitNulls = false
+}
 
 /**
  * Defines a typed method that a client can call on the server's bound service.
@@ -67,9 +77,11 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
         @Serializable
         data class Response(
             // "😅😅😅😅😅😅" -> keyboard will parse out emoji code points
-            val emojisAsString: String?,
-            val displayVoice: Boolean,
-            val enableKeyAnimation: Boolean
+            val emojisAsString: String? = null,
+            val displayVoice: Boolean = true,
+            val enableKeyAnimation: Boolean = true,
+            // Sent by newer servers only, and absent on every phone that shipped before it.
+            val swipeEnabled: Boolean? = null,
         )
     }
 
@@ -80,7 +92,7 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
 
         @Serializable
         data class Response(
-            val hapticsEnabled: Boolean,
+            val hapticsEnabled: Boolean = true,
         )
     }
 

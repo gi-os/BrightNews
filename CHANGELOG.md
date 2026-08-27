@@ -4,6 +4,27 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 2.6.2 - 2026-08-27
+
+### Fixed
+
+- Every screen with a text field crashed the tool on a newer LightOS. `GetKeyboardOptions` is
+  fetched by all of them, and a newer SDK server omits a null field rather than encoding it,
+  which to `kotlinx.serialization` is a missing *required* field on a nullable property with no
+  default. The decode threw, out of `callRemoteServiceMethod`, out of the coroutine
+  `rememberKeyboardOptions` launched, and into the uncaught handler. `lightJson` now sets
+  `explicitNulls = false`, every response field carries a default, and `swipeEnabled` is
+  declared for the servers that send it.
+- A response that cannot be decoded is now returned as `LightResult.Error` instead of thrown.
+  Callers already handle an error and none of them handle an exception, so protocol drift
+  degrades a feature rather than ending the process. `CancellationException` still propagates.
+- The keyboard-options refresh cannot take a screen down. If the lookup fails the screen keeps
+  `defaultKeyboardOptions()`.
+- Article rows clipped the source line whenever a title wrapped to two lines. The row height was
+  a hand-written 4.75 grid units against a content height nearer 5.3, and it is now measured from
+  the paragraph and superfine line heights, so it holds at any screen size. The Gmail label list
+  had the same bug against a 3.6-unit row and shares the new helper.
+
 ## 2.6.1 - 2026-08-25
 
 ### Fixed

@@ -1,34 +1,35 @@
-# News 2.6.1
+# News 2.6.2
 
-**Clear read articles no longer empties the archive.**
+**Adding a feed no longer crashes the app.**
 
-The settings row promised to keep your subscriptions and your saved articles, and it kept both.
-What it did not say is that it also deleted every archived article — the ones v2.6.0 had just
-given you a screen to find again — along with any newsletter you had read offline that Gmail had
-not been told about yet. Two clauses were missing from one line of SQL. Every other delete in the
-reader already carried them.
+On a phone running a recent LightOS, opening any screen with a text field in it — add a feed by
+URL, search, pick a Gmail label — took the whole tool down before it drew. Nothing was wrong with
+the keyboard. Every one of those screens first asks LightOS what the keyboard should look like,
+and the answer stopped being readable: the newer service leaves a field out of its reply instead
+of sending it as empty, and to the code reading that reply a field that can be empty is still a
+field that must be present. The read threw, the throw came back on a background thread nobody was
+watching, and Android killed the process.
 
-Two changes fix it. The delete now exempts archived articles and unpushed reads, the way it
-already exempted saved ones. And **Mark all read** no longer flips archived articles to read,
-which is what put them in the delete's path in the first place: an archived article is in no list
-and in no unread count, so marking it read changed nothing you could see and everything about
-what happened next. Reading state on archived articles is unchanged otherwise — Gmail's own read
-state still reconciles onto them.
+Three changes, in the order they matter. The reply now tolerates a missing field, an unfamiliar
+field, and both at once, so a tool built today keeps working on a phone updated next year. A reply
+that still cannot be read is reported as an error rather than thrown, which is what every caller
+already expected. And the keyboard lookup specifically can no longer take a screen down: if the
+options do not arrive, the screen keeps the standard ones and stays up.
 
-The confirmation screens say what actually happens now, rather than listing two of the four things
-that survive.
+This is not specific to this app. Any Light SDK tool that carries its own copy of the SDK and
+draws a text field has the same crash, and the same three lines fix it.
 
-**Newsletters can no longer embed a frame.** The renderer stripped scripts, stylesheets and
-open-rate beacons from every issue, but it only removed iframes when images were turned off — and
-images are on by default. A sender could load a document of their choosing into the reader and get
-back exactly the open confirmation the beacon strip exists to deny. Frames, objects and embeds now
-go with the scripts, in both modes.
+**A two-line headline stops cutting off the feed name.**
 
-**Signing out of Gmail signs you out of Google.** Consent runs in a WebView this app owns, so
-Google's session cookies were outliving the tokens: sign out, sign back in, and the account
-chooser was skipped and the previous account was reconnected without ever asking. Sign-out and
-"forget client" now clear those cookies too.
+Article rows are a fixed height because the list scrolls in whole rows, and that height was
+written down as a number rather than measured. It was about seven display points short of what a
+two-line title plus the line underneath actually needs, so any article whose headline wrapped
+clipped the line naming the feed and the time — visible on almost every screen of Hacker News.
+The row height is now derived from the type sizes themselves, which also fixes it on screens the
+number was never tuned for. The Gmail label list had the same bug, worse, and got the same fix.
 
-Nothing about the database schema changed, so this installs over 2.6.0 and keeps every
-subscription, label, read state and saved article. Anything already lost to the old delete is
-gone; anything still in the archive is now safe from it.
+Rows are slightly taller, so a screen holds about six instead of six and a half. Nothing is
+clipped.
+
+Nothing about the database schema changed, so this installs over 2.6.1 and keeps every
+subscription, label, read state and saved article.

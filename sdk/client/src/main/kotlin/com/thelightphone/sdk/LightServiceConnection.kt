@@ -19,6 +19,7 @@ import com.thelightphone.sdk.shared.LightServiceMethod
 import com.thelightphone.sdk.shared.LightServiceMethod.RequestPermissionComponent.PERMISSION_NAME_KEY
 import com.thelightphone.sdk.shared.getOrElse
 import com.thelightphone.sdk.shared.getOrNull
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -139,7 +140,23 @@ suspend fun <TRequest, TResponse> callRemoteServiceMethod(
         return@withContext LightResult.Error(LightResult.ErrorCode.Unknown, "Unable to bind to server")
     }
     when (val result = LightServiceConnection.request(method.id, method.encodeRequest(body))) {
-        is LightResult.Success -> LightResult.Success(method.decodeResponse(result.data))
+        // Decoding is the one step here that can throw, and it throws for a reason no caller
+        // can prevent: the phone's build of the service is not the build this tool was
+        // compiled against. Every caller already handles an Error, and none of them expect an
+        // exception, so a payload we cannot read is reported as one rather than thrown into
+        // whatever coroutine happened to ask.
+        is LightResult.Success -> try {
+            LightResult.Success(method.decodeResponse(result.data))
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            Log.e(TAG, "Could not decode the ${method.id} response", error)
+            LightResult.Error(
+                LightResult.ErrorCode.Unknown,
+                "Undecodable ${method.id} response: ${error.message}",
+            )
+        }
+
         is LightResult.Error -> result
     }
 }

@@ -5,7 +5,7 @@
 Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,
 Gmail newsletters in the other, both read in the same reader. Built on the Light SDK; tool
 id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and search stay on
-the phone. Current release: **v2.6.0** (`tool/lighttool.toml`: versionCode 25).
+the phone. Current release: **v2.6.2** (`tool/lighttool.toml`: versionCode 27).
 
 ## Install via BrightMarket
 
@@ -277,6 +277,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v2.6.2  | —         | Opening anything with a text field no longer crashes the tool on a newer LightOS, and a two-line headline stops clipping the feed name under it |
 | v2.6.0  | —         | The archive is a place you can look. Archived articles are listed, restorable one at a time or all at once, and no longer trimmed away |
 | v2.3.0  | —         | Pictures show in colour on a phone that stays grey, via the daltonizer and a one-time adb grant |
 | v2.2.0  | —         | Images keep their colour. The app no longer flattens them; the phone's own daltonizer does that, and can be switched off |
