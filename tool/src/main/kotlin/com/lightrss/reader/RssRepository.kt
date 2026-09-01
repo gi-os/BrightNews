@@ -65,7 +65,7 @@ class RssApi {
         val response = request(normalized, etag, lastModified)
         if (response.status == HttpStatusCode.NotModified) return FeedLoadResult.NotModified
         ensureSuccess(response)
-        val body = response.bodyAsText()
+        val body = response.bodyAsText().trimXmlProlog()
         val effectiveUrl = response.call.request.url.toString()
 
         val looksLikeFeed = body.take(2_000).lowercase().let { head ->
@@ -84,7 +84,7 @@ class RssApi {
             ?: throw IllegalArgumentException("No RSS or Atom feed was found at this address.")
         val feedResponse = request(discovered, null, null)
         ensureSuccess(feedResponse)
-        val feedBody = feedResponse.bodyAsText()
+        val feedBody = feedResponse.bodyAsText().trimXmlProlog()
         val effectiveFeedUrl = feedResponse.call.request.url.toString()
         return FeedLoadResult.Loaded(
             feed = RssParser.parse(feedBody, effectiveFeedUrl),
@@ -163,13 +163,18 @@ class RssApi {
 
     fun close() = client.close()
 
-    private suspend fun request(url: String, etag: String?, lastModified: String?): HttpResponse =
-        client.get(url) {
+    private suspend fun request(url: String, etag: String?, lastModified: String?): HttpResponse {
+        // OkHttp never puts a URL's user:pass@ on the wire, so a feed address carrying
+        // credentials was silently fetched with none. Send them as the header they meant.
+        val (target, authorization) = splitUserInfo(url)
+        return client.get(target) {
             header(HttpHeaders.UserAgent, USER_AGENT)
             header(HttpHeaders.Accept, "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.8")
+            if (authorization != null) header(HttpHeaders.Authorization, authorization)
             if (!etag.isNullOrBlank()) header(HttpHeaders.IfNoneMatch, etag)
             if (!lastModified.isNullOrBlank()) header(HttpHeaders.IfModifiedSince, lastModified)
         }
+    }
 
     private fun ensureSuccess(response: HttpResponse) {
         if (!response.status.isSuccess()) {
@@ -209,6 +214,28 @@ class RssApi {
                 throw IllegalArgumentException("Enter a complete website or feed address.")
             }
             return uri.normalize().toString()
+        }
+
+        /**
+         * A UTF-8 BOM or stray whitespace ahead of the XML declaration makes SAX refuse the
+         * whole document ("content is not allowed in prolog"), and real feeds ship both.
+         */
+        internal fun String.trimXmlProlog(): String =
+            trimStart().removePrefix("\uFEFF").trimStart()
+
+        /**
+         * Splits `user:pass@` userinfo out of a URL and returns the bare URL alongside the
+         * Basic Authorization header value it stood for, or null when there was none.
+         */
+        internal fun splitUserInfo(url: String): Pair<String, String?> {
+            val uri = runCatching { URI(url) }.getOrNull() ?: return url to null
+            val userInfo = uri.userInfo ?: return url to null
+            val stripped = runCatching {
+                URI(uri.scheme, null, uri.host, uri.port, uri.path, uri.query, uri.fragment).toString()
+            }.getOrDefault(url)
+            val encoded = java.util.Base64.getEncoder()
+                .encodeToString(userInfo.toByteArray(Charsets.UTF_8))
+            return stripped to "Basic $encoded"
         }
     }
 }
@@ -533,6 +560,7 @@ class RssRepository(
                 link = item.link.take(MAX_URL_LENGTH),
                 author = item.author.take(MAX_AUTHOR_LENGTH),
                 publishedAt = item.publishedAt,
+                hasDate = item.hasDate,
                 summary = item.summary.take(MAX_SUMMARY_LENGTH),
                 content = item.content.take(MAX_CONTENT_LENGTH),
                 imageUrl = item.imageUrl.take(MAX_URL_LENGTH),

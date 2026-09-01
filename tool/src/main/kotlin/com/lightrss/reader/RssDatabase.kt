@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -94,6 +95,14 @@ data class ArticleEntity(
      * answer cannot erase it.
      */
     val pendingRead: Boolean = false,
+    /**
+     * Whether [publishedAt] came from the feed rather than being invented at parse time.
+     *
+     * Not a column: it only rides from the parser into [RssDao.storeArticles], which uses it
+     * to leave a dateless item's first-seen stamp alone on refresh. Rows read back from the
+     * database carry the default and nothing downstream reads it.
+     */
+    @Ignore val hasDate: Boolean = true,
 )
 
 /**
@@ -362,6 +371,37 @@ interface RssDao {
         contentBlocks: String,
     )
 
+    /**
+     * [updateArticleContent] without the publishedAt write, for items whose feed sent no date.
+     *
+     * Their stamp is invented at parse time from "now", so rewriting it on every refresh
+     * re-stamped the whole feed to the moment of the sync and reshuffled the list. The stamp
+     * assigned when the row was first inserted is the one that stays.
+     */
+    @Query(
+        """
+        UPDATE articles SET
+            title = :title,
+            link = :link,
+            author = :author,
+            summary = :summary,
+            content = :content,
+            imageUrl = :imageUrl,
+            contentBlocks = :contentBlocks
+        WHERE id = :id
+        """,
+    )
+    suspend fun updateArticleContentKeepingDate(
+        id: String,
+        title: String,
+        link: String,
+        author: String,
+        summary: String,
+        content: String,
+        imageUrl: String,
+        contentBlocks: String,
+    )
+
     @Query("UPDATE articles SET isRead = :isRead WHERE id = :articleId")
     suspend fun setRead(articleId: String, isRead: Boolean)
 
@@ -584,19 +624,34 @@ interface RssDao {
 
     @Transaction
     suspend fun storeArticles(articles: List<ArticleEntity>) {
+        // A new row takes everything, fallback date included; an existing one refreshes its
+        // content, but a dateless item keeps the publishedAt it was first inserted with.
         insertArticles(articles)
         articles.forEach { article ->
-            updateArticleContent(
-                id = article.id,
-                title = article.title,
-                link = article.link,
-                author = article.author,
-                publishedAt = article.publishedAt,
-                summary = article.summary,
-                content = article.content,
-                imageUrl = article.imageUrl,
-                contentBlocks = article.contentBlocks,
-            )
+            if (article.hasDate) {
+                updateArticleContent(
+                    id = article.id,
+                    title = article.title,
+                    link = article.link,
+                    author = article.author,
+                    publishedAt = article.publishedAt,
+                    summary = article.summary,
+                    content = article.content,
+                    imageUrl = article.imageUrl,
+                    contentBlocks = article.contentBlocks,
+                )
+            } else {
+                updateArticleContentKeepingDate(
+                    id = article.id,
+                    title = article.title,
+                    link = article.link,
+                    author = article.author,
+                    summary = article.summary,
+                    content = article.content,
+                    imageUrl = article.imageUrl,
+                    contentBlocks = article.contentBlocks,
+                )
+            }
         }
     }
 }

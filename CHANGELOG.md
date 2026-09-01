@@ -4,6 +4,47 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 2.7.0 - 2026-09-01
+
+### Fixed
+
+- The decode-tolerance rule 2.6.2 established now covers every server reply, not only
+  `GetKeyboardOptions`. `GetToken`, `GetVersion`, `GetPermission` and
+  `RequestPermissionComponent` responses all carry defaults; `lightJson` sets
+  `coerceInputValues = true` so an enum member from a newer server coerces to
+  `Result.Unknown` instead of throwing; and `ensureToken` wraps its decode in the same
+  guard `callRemoteServiceMethod` already had, treating a blank token as a failed grant.
+  A blank permission component is likewise an error at the call site, not a launch of
+  nothing. `GetUserPreferences` joined `allMethods`, which the TODO above it predicted.
+- Feeds that publish no dates reshuffled to the top on every refresh. The parse-time
+  fallback stamp was rewritten by the unconditional content UPDATE in `storeArticles`, so
+  every dateless item re-stamped to the moment of the sync. Parsed articles now carry
+  `hasDate`, and a dateless item's refresh goes through an UPDATE that leaves
+  `publishedAt` alone. First insert still assigns the fallback, so nothing changes about
+  where a new item lands.
+- The Subscriptions list still used a hand-tuned 3.6-unit row for the same
+  paragraph-over-superfine stack that clipped in the article and Gmail label lists. It now
+  uses the measured `stackedRowHeightGridUnits` helper, with the old constant as the floor.
+- The version on the Settings screen said 2.4.1. It now reads
+  `BuildConfig.VERSION_NAME`, generated from `lighttool.toml`, so it cannot fall behind a
+  release again (`buildConfig` is now enabled for the tool module).
+- Site sign-in cookies could be lost to a fast DONE or BACK: the persist ran on
+  `viewModelScope`, which leaving the screen cancels. It now runs under `NonCancellable`.
+- A scanned Google credential carrying its own `redirect_uri` never completed consent: the
+  WebView matcher only knew the three built-in prefixes, and `GmailAuth.isRedirect` was
+  dead code. The stored redirect is published into the sign-in UI state and matched
+  alongside the static prefixes, and `isRedirect` is now the authoritative check before the
+  code exchange.
+- Google revoking a refresh token (`invalid_grant`) cleared the credentials without
+  publishing it, so Settings kept saying SIGNED IN. The state refreshes with the clear.
+- A newsletter charset with trailing parameters ("utf-8; boundary=…") fell back to UTF-8;
+  the parameter list is now cut before the name is looked up.
+- A feed body opening with a UTF-8 BOM or stray whitespace failed SAX with "content is not
+  allowed in prolog". The prolog is trimmed before parsing.
+- A feed URL with `user:pass@` userinfo authenticated with nothing, because OkHttp never
+  sends userinfo. The credentials are split into a Basic `Authorization` header on that
+  feed's requests.
+
 ## 2.6.2 - 2026-08-27
 
 ### Fixed

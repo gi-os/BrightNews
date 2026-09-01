@@ -113,9 +113,29 @@ internal object LightServiceConnection : ServiceConnection {
             LightServiceMethod.GetToken.encodeRequest(Unit)
         )) {
             is LightResult.Success -> {
-                token = LightServiceMethod.GetToken.decodeResponse(result.data).token
-                Log.i(TAG, "Acquired service token")
-                true
+                // The same drift guard as callRemoteServiceMethod below: a GetToken payload
+                // from a server build this tool does not know must fail the call, not throw
+                // out of it. A blank token is the decoded shape of the same failure.
+                val decoded = try {
+                    LightServiceMethod.GetToken.decodeResponse(result.data)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (error: Throwable) {
+                    Log.e(TAG, "Could not decode the ${LightServiceMethod.GetToken.id} response", error)
+                    null
+                }
+                when {
+                    decoded == null -> false
+                    decoded.token.isBlank() -> {
+                        Log.e(TAG, "${LightServiceMethod.GetToken.id} response carried a blank token")
+                        false
+                    }
+                    else -> {
+                        token = decoded.token
+                        Log.i(TAG, "Acquired service token")
+                        true
+                    }
+                }
             }
 
             is LightResult.Error -> {
@@ -182,7 +202,17 @@ class PermissionRequestLauncher internal constructor(
                 Log.e(TAG, "Error fetching permission request component: $it")
                 return@launch
             }
+            // A blank name is a decodable reply with nothing in it — a server that answered
+            // without the component. There is nothing to launch, so stop here.
+            if (result.componentName.isBlank()) {
+                Log.e(TAG, "Permission request component reply was blank")
+                return@launch
+            }
             val componentName = ComponentName.unflattenFromString(result.componentName)
+            if (componentName == null) {
+                Log.e(TAG, "Unparseable permission request component: ${result.componentName}")
+                return@launch
+            }
             // we don't actually care about result, going to recheck through the server anyways
             activity.startActivityForResult(
                 Intent().setComponent(componentName).putExtra(PERMISSION_NAME_KEY, permission),

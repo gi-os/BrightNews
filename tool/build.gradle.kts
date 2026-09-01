@@ -60,6 +60,12 @@ android {
         }
     }
 
+    // The Settings screen shows BuildConfig.VERSION_NAME, so the version on screen is the one
+    // the plugin read from lighttool.toml rather than a string somebody has to remember to edit.
+    buildFeatures {
+        buildConfig = true
+    }
+
     lint {
         warningsAsErrors = false
         error += "RestrictedApi"

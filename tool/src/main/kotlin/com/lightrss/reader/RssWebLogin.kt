@@ -30,6 +30,7 @@ import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 
 /** Stores whatever the sign-in view earned, so reader fetches can use it. */
@@ -39,7 +40,10 @@ class SignInViewModel(
 ) : LightViewModel<Unit>() {
 
     fun keep(cookies: String?, userAgent: String?) {
-        viewModelScope.launch(Dispatchers.IO) {
+        // DONE and BACK pop this screen, which clears its ViewModelStore and cancels this
+        // scope — routinely before the write below has run, so the sign-in that was just
+        // earned never landed. NonCancellable detaches the persist from the screen's lifetime.
+        viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             repository.setSiteAccess(url, cookies, userAgent)
         }
     }

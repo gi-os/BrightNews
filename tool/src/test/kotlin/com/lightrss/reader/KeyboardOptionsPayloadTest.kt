@@ -65,4 +65,42 @@ class KeyboardOptionsPayloadTest {
     fun `user preferences survive a server that omits them`() {
         assertTrue(LightServiceMethod.GetUserPreferences.decodeResponse("{}").hapticsEnabled)
     }
+
+    // The rule the keyboard taught is not about the keyboard. Every reply the server sends has
+    // to decode on a build that predates it, and the ones below were still one omitted field —
+    // or one unrecognised enum member — away from a throw.
+
+    @Test
+    fun `a token reply with no token decodes to a blank one`() {
+        // Blank is not a usable token; ensureToken treats it as a failed grant. The decode
+        // itself must survive so the failure is a logged false, not an exception.
+        assertEquals("", LightServiceMethod.GetToken.decodeResponse("{}").token)
+    }
+
+    @Test
+    fun `a version reply with no version decodes`() {
+        assertEquals("", LightServiceMethod.GetVersion.decodeResponse("{}").version)
+    }
+
+    @Test
+    fun `a permission component reply with no component decodes to a blank one`() {
+        assertEquals("", LightServiceMethod.RequestPermissionComponent.decodeResponse("{}").componentName)
+    }
+
+    @Test
+    fun `a permission result this build has never heard of coerces to Unknown`() {
+        val decoded = LightServiceMethod.GetPermission.decodeResponse(
+            """{"permissionResult":"GrantedWhileInUse"}"""
+        )
+
+        assertEquals(LightServiceMethod.GetPermission.Result.Unknown, decoded.permissionResult)
+    }
+
+    @Test
+    fun `a permission reply with no result decodes to Unknown`() {
+        assertEquals(
+            LightServiceMethod.GetPermission.Result.Unknown,
+            LightServiceMethod.GetPermission.decodeResponse("{}").permissionResult,
+        )
+    }
 }

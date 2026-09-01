@@ -317,18 +317,29 @@ fun FeedList(
         return
     }
     WheelScroll(listState)
+    // Measured, not hand-tuned: the same one-line-over-superfine stack that clipped in the
+    // article and Gmail label lists, so it gets the same helper. The constant is only a floor.
+    val rowHeight = stackedRowHeightGridUnits(
+        titleLines = 1,
+        verticalPaddingUnits = FEED_ROW_PADDING_UNITS,
+        gapUnits = FEED_ROW_GAP_UNITS,
+        minimumUnits = FEED_ROW_MIN_HEIGHT,
+    )
     LightLazyScrollView(
         modifier = modifier,
         listState = listState,
-        uniformItemHeightGridUnits = FEED_ROW_HEIGHT,
+        uniformItemHeightGridUnits = rowHeight,
     ) {
         items(feeds, key = { it.feed.id }) { row ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(FEED_ROW_HEIGHT.gridUnitsAsDp())
+                    .height(rowHeight.gridUnitsAsDp())
                     .lightClickable(onClickLabel = "Open subscription", role = Role.Button) { onOpen(row) }
-                    .padding(horizontal = 1f.gridUnitsAsDp()),
+                    .padding(
+                        horizontal = 1f.gridUnitsAsDp(),
+                        vertical = FEED_ROW_PADDING_UNITS.gridUnitsAsDp(),
+                    ),
                 verticalArrangement = Arrangement.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -366,7 +377,7 @@ fun FeedList(
                     lighten = true,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
+                    modifier = Modifier.padding(top = FEED_ROW_GAP_UNITS.gridUnitsAsDp()),
                 )
             }
         }
@@ -468,4 +479,9 @@ private const val ARTICLE_ROW_MIN_HEIGHT = 4.75f
 private const val THUMBNAIL_WIDTH = 4.4f
 private const val THUMBNAIL_HEIGHT = 3.6f
 private const val READER_IMAGE_PLACEHOLDER = 6f
-private const val FEED_ROW_HEIGHT = 3.6f
+
+// The subscriptions list: one line of paragraph type over a superfine detail line. The height
+// itself is measured in stackedRowHeightGridUnits; this is only its floor.
+private const val FEED_ROW_GAP_UNITS = 0.25f
+private const val FEED_ROW_PADDING_UNITS = 0.45f
+private const val FEED_ROW_MIN_HEIGHT = 3.6f

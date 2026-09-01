@@ -271,6 +271,9 @@ class GmailAuth(private val store: AuthStore) {
         } catch (e: TokenError) {
             if (e.error == "invalid_grant") {
                 clearTokens()
+                // Publish the sign-out too, or Settings keeps saying SIGNED IN over
+                // credentials that no longer exist.
+                refreshState()
                 throw ReauthRequired("authorisation expired")
             }
             throw e

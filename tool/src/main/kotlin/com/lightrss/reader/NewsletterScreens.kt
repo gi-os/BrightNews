@@ -777,6 +777,11 @@ class GmailSignInScreen(
         val url = state.url
         var webRef by remember { mutableStateOf<WebView?>(null) }
 
+        // The redirect this client actually registered — scanned credentials can store their
+        // own (see GmailAuth.redirectUri). Held the same way as `finish`, so the WebViewClient
+        // reads the current value rather than the one captured at view creation.
+        val storedRedirect = rememberUpdatedState(state.redirectUri)
+
         // Held in a ref so the WebViewClient always reaches the current screen rather than the
         // one captured when the view was created.
         val finish = rememberUpdatedState<(String) -> Unit> { redirect ->
@@ -839,7 +844,7 @@ class GmailSignInScreen(
                                         // The redirect carries the authorization code in its
                                         // query. Swallowing it here is the whole mechanism —
                                         // it is never fetched, so it never has to resolve.
-                                        if (isRedirect(target)) {
+                                        if (isRedirect(target, storedRedirect.value)) {
                                             finish.value(target)
                                             return true
                                         }
@@ -861,12 +866,17 @@ class GmailSignInScreen(
     }
 
     /**
-     * Matched against the string rather than asked of the suspending API, because
+     * Matched against strings rather than asked of the suspending API, because
      * `shouldOverrideUrlLoading` cannot suspend and must answer before the request is made.
-     * Both accepted shapes are recognisable without a round trip to storage.
+     * [storedRedirect] is the URI this client is actually registered for, snapshot into the UI
+     * state before the page loads — without it a scanned credential with its own redirect (an
+     * Android-type client's custom scheme, say) sailed past the static prefixes and consent
+     * never completed. The static shapes stay as a fallback; the ViewModel re-checks the
+     * swallowed URL with `GmailAuth.isRedirect` before exchanging the code.
      */
-    private fun isRedirect(url: String): Boolean =
-        url.startsWith("http://127.0.0.1") ||
+    private fun isRedirect(url: String, storedRedirect: String?): Boolean =
+        (!storedRedirect.isNullOrBlank() && url.startsWith(storedRedirect)) ||
+            url.startsWith("http://127.0.0.1") ||
             url.startsWith("http://localhost") ||
             url.startsWith("com.lightrss.reader:")
 }

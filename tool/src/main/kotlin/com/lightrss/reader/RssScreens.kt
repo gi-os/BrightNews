@@ -1146,7 +1146,9 @@ class SettingsScreen(
                             modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                         )
                         LightText(
-                            text = "VERSION 2.4.1",
+                            // Generated from lighttool.toml, so it cannot fall behind a release
+                            // again the way the hand-written string did.
+                            text = "VERSION ${BuildConfig.VERSION_NAME}",
                             variant = LightTextVariant.Superfine,
                             lighten = true,
                             modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),

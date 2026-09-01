@@ -16,6 +16,10 @@ import kotlinx.serialization.serializer
 val lightJson = Json {
     ignoreUnknownKeys = true
     explicitNulls = false
+    // The same drift, aimed at an enum: a newer server can answer with a member this build has
+    // never heard of, and without this the decode throws instead of falling back to the
+    // property's default.
+    coerceInputValues = true
 }
 
 /**
@@ -48,7 +52,9 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
         override val responseSerializer = serializer<Response>()
 
         @Serializable
-        data class Response(val token: String)
+        // A blank token is meaningless — the caller must treat it as a failed grant, which
+        // `LightServiceConnection.ensureToken` does. The default only keeps the decode alive.
+        data class Response(val token: String = "")
     }
 
     object GetVersion : LightServiceMethod<Unit, GetVersion.Response> {
@@ -57,7 +63,7 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
         override val responseSerializer = serializer<Response>()
 
         @Serializable
-        data class Response(val version: String)
+        data class Response(val version: String = "")
     }
 
     object SetRingtone : LightServiceMethod<Request, Unit> {
@@ -109,7 +115,9 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
 
         @Serializable
         data class Response(
-            val permissionResult: Result
+            // Unknown, not Granted: a value this build cannot read must never widen access.
+            // `coerceInputValues` in [lightJson] lands unrecognised members here too.
+            val permissionResult: Result = Result.Unknown
         )
     }
 
@@ -120,7 +128,8 @@ sealed interface LightServiceMethod<TRequest, TResponse> {
         override val responseSerializer = serializer<Response>()
 
         @Serializable
-        data class Response(val componentName: String)
+        // A blank componentName cannot be launched; the caller treats it as an error.
+        data class Response(val componentName: String = "")
     }
 }
 
@@ -130,6 +139,7 @@ val allMethods: Map<String, LightServiceMethod<*, *>> = listOf(
     LightServiceMethod.GetVersion,
     LightServiceMethod.SetRingtone,
     LightServiceMethod.GetKeyboardOptions,
+    LightServiceMethod.GetUserPreferences,
     LightServiceMethod.GetPermission,
     LightServiceMethod.RequestPermissionComponent,
 ).associateBy { it.id }

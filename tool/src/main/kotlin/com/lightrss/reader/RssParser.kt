@@ -27,6 +27,12 @@ data class ParsedArticle(
     val link: String,
     val author: String,
     val publishedAt: Long,
+    /**
+     * Whether [publishedAt] came from the feed, as opposed to the fallback stamp invented at
+     * parse time. A dateless item keeps the stamp it was first inserted with; re-stamping it on
+     * every refresh would walk the whole feed back to "just now" — see `RssDao.storeArticles`.
+     */
+    val hasDate: Boolean = true,
     val summary: String,
     val content: String,
     val imageUrl: String = "",
@@ -152,9 +158,12 @@ object RssParser {
     private fun String.removeLeadingNoise(): String =
         replace(Regex("""^(?:\s|…|\.{2,}|·|•)+"""), "")
 
-    fun parseDate(value: String?, fallback: Long): Long {
+    fun parseDate(value: String?, fallback: Long): Long = parseDateOrNull(value) ?: fallback
+
+    /** The parsed instant, or null for a blank date or a shape this reader does not know. */
+    fun parseDateOrNull(value: String?): Long? {
         val raw = value?.trim().orEmpty()
-        if (raw.isEmpty()) return fallback
+        if (raw.isEmpty()) return null
         val attempts = listOf<(String) -> Instant>(
             { Instant.parse(it) },
             { OffsetDateTime.parse(it, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toInstant() },
@@ -179,7 +188,7 @@ object RssParser {
                 Unit
             }
         }
-        return fallback
+        return null
     }
 
     fun stableArticleId(feedUrl: String, guid: String, link: String, title: String): String {
@@ -469,6 +478,7 @@ private class FeedHandler(
                 .ifBlank { values["pubdate"].orEmpty() }
                 .ifBlank { values["updated"].orEmpty() }
             val fallback = now - index * 1_000L
+            val parsedDate = RssParser.parseDateOrNull(dateText)
             ParsedArticle(
                 guid = guid.ifBlank { "$title-$dateText" },
                 title = title,
@@ -478,7 +488,8 @@ private class FeedHandler(
                         .ifBlank { values["author"].orEmpty() }
                         .ifBlank { values["name"].orEmpty() },
                 ),
-                publishedAt = RssParser.parseDate(dateText, fallback),
+                publishedAt = parsedDate ?: fallback,
+                hasDate = parsedDate != null,
                 summary = summary,
                 content = content,
                 imageUrl = imageUrl,

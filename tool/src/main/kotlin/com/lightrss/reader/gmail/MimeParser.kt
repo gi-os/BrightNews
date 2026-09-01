@@ -117,7 +117,10 @@ object MimeParser {
 
     /** An unknown or unsupported charset must not lose the whole email. */
     private fun charsetOf(contentType: String?): Charset {
-        val declared = contentType?.substringAfter("charset=", "")?.trim('"', ' ', ';')
+        // Cut at the next parameter first: "utf-8; boundary=x" is not a charset name.
+        val declared = contentType?.substringAfter("charset=", "")
+            ?.substringBefore(';')
+            ?.trim('"', ' ')
         if (declared.isNullOrBlank()) return Charsets.UTF_8
         return runCatching { Charset.forName(declared) }.getOrDefault(Charsets.UTF_8)
     }

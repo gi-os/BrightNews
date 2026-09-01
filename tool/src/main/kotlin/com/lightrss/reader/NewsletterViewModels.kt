@@ -240,6 +240,12 @@ class ClientIdViewModel(private val repository: RssRepository) : LightViewModel<
 
 data class SignInUiState(
     val url: String? = null,
+    /**
+     * The redirect this client is registered for — [GmailAuth.DEFAULT_REDIRECT] unless scanned
+     * credentials stored their own. The WebView's matcher cannot suspend, so it matches against
+     * this snapshot; it is published before [url], so it is set before the page can navigate.
+     */
+    val redirectUri: String? = null,
     val finishing: Boolean = false,
     val error: String? = null,
 )
@@ -255,9 +261,14 @@ class GmailSignInViewModel(private val repository: RssRepository) : LightViewMod
     init {
         viewModelScope.launch(Dispatchers.IO) {
             val auth = repository.newsletters.auth
+            val redirect = runCatching { auth.redirectUri() }.getOrNull()
             val url = runCatching { auth.authorizationUrl() }.getOrNull()
             _state.update {
-                it.copy(url = url, error = if (url == null) "Could not build the sign-in link." else null)
+                it.copy(
+                    url = url,
+                    redirectUri = redirect,
+                    error = if (url == null) "Could not build the sign-in link." else null,
+                )
             }
         }
     }
@@ -267,7 +278,12 @@ class GmailSignInViewModel(private val repository: RssRepository) : LightViewMod
         consumed = true
         _state.update { it.copy(finishing = true) }
         viewModelScope.launch(Dispatchers.IO) {
-            val ok = runCatching { repository.newsletters.auth.onRedirect(url) }.getOrDefault(false)
+            val auth = repository.newsletters.auth
+            // The screen's matcher is a synchronous prefix snapshot; this is the authoritative
+            // check against the stored redirect, now that suspending is allowed. Google only
+            // ever redirects to the URI the consent URL asked for, so a genuine redirect
+            // always passes it.
+            val ok = runCatching { auth.isRedirect(url) && auth.onRedirect(url) }.getOrDefault(false)
             if (ok) repository.refreshAll(force = true)
             withContext(Dispatchers.Main) { onDone(ok) }
         }
