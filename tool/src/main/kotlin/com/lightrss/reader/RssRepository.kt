@@ -550,28 +550,30 @@ class RssRepository(
         dao.setFeedError(feed.id, friendlyMessage(error))
     }
 
-    private fun ParsedFeed.toEntities(feedId: Long, feedUrl: String): List<ArticleEntity> =
+    private fun ParsedFeed.toEntities(feedId: Long, feedUrl: String): List<ArticleUpsert> =
         items.distinctBy { it.guid.ifBlank { it.link.ifBlank { it.title } } }.map { item ->
-            ArticleEntity(
-                id = RssParser.stableArticleId(feedUrl, item.guid, item.link, item.title),
-                feedId = feedId,
-                guid = item.guid,
-                title = item.title.take(MAX_TITLE_LENGTH),
-                link = item.link.take(MAX_URL_LENGTH),
-                author = item.author.take(MAX_AUTHOR_LENGTH),
-                publishedAt = item.publishedAt,
+            ArticleUpsert(
+                article = ArticleEntity(
+                    id = RssParser.stableArticleId(feedUrl, item.guid, item.link, item.title),
+                    feedId = feedId,
+                    guid = item.guid,
+                    title = item.title.take(MAX_TITLE_LENGTH),
+                    link = item.link.take(MAX_URL_LENGTH),
+                    author = item.author.take(MAX_AUTHOR_LENGTH),
+                    publishedAt = item.publishedAt,
+                    summary = item.summary.take(MAX_SUMMARY_LENGTH),
+                    content = item.content.take(MAX_CONTENT_LENGTH),
+                    imageUrl = item.imageUrl.take(MAX_URL_LENGTH),
+                    contentBlocks = ContentBlocks.encode(item.blocks).let { encoded ->
+                        // Cut on a record boundary: a half-written line would decode into junk.
+                        if (encoded.length <= MAX_CONTENT_LENGTH) {
+                            encoded
+                        } else {
+                            encoded.take(MAX_CONTENT_LENGTH).substringBeforeLast('\n', "")
+                        }
+                    },
+                ),
                 hasDate = item.hasDate,
-                summary = item.summary.take(MAX_SUMMARY_LENGTH),
-                content = item.content.take(MAX_CONTENT_LENGTH),
-                imageUrl = item.imageUrl.take(MAX_URL_LENGTH),
-                contentBlocks = ContentBlocks.encode(item.blocks).let { encoded ->
-                    // Cut on a record boundary: a half-written line would decode into junk.
-                    if (encoded.length <= MAX_CONTENT_LENGTH) {
-                        encoded
-                    } else {
-                        encoded.take(MAX_CONTENT_LENGTH).substringBeforeLast('\n', "")
-                    }
-                },
             )
         }
 

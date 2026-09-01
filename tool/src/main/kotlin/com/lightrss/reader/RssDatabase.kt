@@ -5,7 +5,6 @@ import androidx.room.Database
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
-import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -95,14 +94,20 @@ data class ArticleEntity(
      * answer cannot erase it.
      */
     val pendingRead: Boolean = false,
-    /**
-     * Whether [publishedAt] came from the feed rather than being invented at parse time.
-     *
-     * Not a column: it only rides from the parser into [RssDao.storeArticles], which uses it
-     * to leave a dateless item's first-seen stamp alone on refresh. Rows read back from the
-     * database carry the default and nothing downstream reads it.
-     */
-    @Ignore val hasDate: Boolean = true,
+)
+
+/**
+ * An article on its way into the database, with one fact that is not a column: whether
+ * [ArticleEntity.publishedAt] came from the feed or was invented at parse time.
+ *
+ * A wrapper rather than a field on the entity because Room refuses an `@Ignore` constructor
+ * parameter — "Entities and data classes must have a usable public constructor." The flag only
+ * rides from the parser into [RssDao.storeArticles], which uses it to leave a dateless item's
+ * first-seen stamp alone on refresh; nothing read back out of the database needs it.
+ */
+data class ArticleUpsert(
+    val article: ArticleEntity,
+    val hasDate: Boolean = true,
 )
 
 /**
@@ -280,10 +285,10 @@ interface RssDao {
     @Transaction
     suspend fun insertFeedWithArticles(
         feed: FeedEntity,
-        articles: List<ArticleEntity>,
+        articles: List<ArticleUpsert>,
     ): Long {
         val feedId = insertFeed(feed)
-        storeArticles(articles.map { it.copy(feedId = feedId) })
+        storeArticles(articles.map { it.copy(article = it.article.copy(feedId = feedId)) })
         return feedId
     }
 
@@ -623,12 +628,13 @@ interface RssDao {
     suspend fun trimNewsletters(feedId: Long, keep: Int)
 
     @Transaction
-    suspend fun storeArticles(articles: List<ArticleEntity>) {
+    suspend fun storeArticles(articles: List<ArticleUpsert>) {
         // A new row takes everything, fallback date included; an existing one refreshes its
         // content, but a dateless item keeps the publishedAt it was first inserted with.
-        insertArticles(articles)
-        articles.forEach { article ->
-            if (article.hasDate) {
+        insertArticles(articles.map { it.article })
+        articles.forEach { upsert ->
+            val article = upsert.article
+            if (upsert.hasDate) {
                 updateArticleContent(
                     id = article.id,
                     title = article.title,
