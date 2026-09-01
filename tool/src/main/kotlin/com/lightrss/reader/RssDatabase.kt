@@ -154,6 +154,19 @@ data class FeedRow(
     val articleCount: Int,
 )
 
+/** The ingredients of an article's identity, plus what the one-time re-key must not lose. */
+data class ArticleIdentity(
+    val id: String,
+    val feedId: Long,
+    val guid: String,
+    val link: String,
+    val title: String,
+    val insertedAt: Long,
+    val isRead: Boolean,
+    val isStarred: Boolean,
+    val isArchived: Boolean,
+)
+
 @Dao
 interface RssDao {
     /**
@@ -282,13 +295,19 @@ interface RssDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertFeed(feed: FeedEntity): Long
 
+    /**
+     * A feed and its first articles, in one transaction.
+     *
+     * [articles] is a builder rather than a list because an article's id is derived from the
+     * feed's database id, which does not exist until [insertFeed] has returned it.
+     */
     @Transaction
     suspend fun insertFeedWithArticles(
         feed: FeedEntity,
-        articles: List<ArticleUpsert>,
+        articles: (feedId: Long) -> List<ArticleUpsert>,
     ): Long {
         val feedId = insertFeed(feed)
-        storeArticles(articles.map { it.copy(article = it.article.copy(feedId = feedId)) })
+        storeArticles(articles(feedId))
         return feedId
     }
 
@@ -314,11 +333,15 @@ interface RssDao {
     @Query("DELETE FROM app_metadata WHERE `key` = :key")
     suspend fun deleteMetadata(key: String)
 
+    /**
+     * `url` is deliberately absent: the stored address is the one the reader subscribed with,
+     * and every fetch goes back to it. Writing the fetch's post-redirect URL here let a feed
+     * behind a rotating mirror rewrite its own identity on every refresh.
+     */
     @Query(
         """
         UPDATE feeds SET
             title = :title,
-            url = :url,
             siteUrl = :siteUrl,
             description = :description,
             lastFetchedAt = :fetchedAt,
@@ -331,7 +354,6 @@ interface RssDao {
     suspend fun updateFeedAfterRefresh(
         feedId: Long,
         title: String,
-        url: String,
         siteUrl: String,
         description: String,
         fetchedAt: Long,
@@ -659,6 +681,78 @@ interface RssDao {
                 )
             }
         }
+    }
+
+    /* ------------------------------------------------------------------ id re-key */
+
+    @Query(
+        """
+        SELECT a.id, a.feedId, a.guid, a.link, a.title, a.insertedAt,
+               a.isRead, a.isStarred, a.isArchived
+        FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE f.sourceType = 'RSS'
+        """,
+    )
+    suspend fun rssArticleIdentities(): List<ArticleIdentity>
+
+    @Query("SELECT COUNT(*) FROM articles WHERE id = :id")
+    suspend fun countArticlesWithId(id: String): Int
+
+    @Query("UPDATE articles SET id = :newId WHERE id = :oldId")
+    suspend fun rewriteArticleId(oldId: String, newId: String)
+
+    /** Only [rekeyRssArticleIdsOnce] calls this; it removes a duplicate whose article survives. */
+    @Query("DELETE FROM articles WHERE id = :id")
+    suspend fun deleteArticleForRekey(id: String)
+
+    /**
+     * One-time data migration: re-keys every RSS article onto the feed-id identity scheme.
+     *
+     * Ids used to hash the fetch's post-redirect effective URL, so a feed whose redirect
+     * target varied regenerated every id and orphaned its read and starred state. Each row's
+     * new id is recomputed from its own feedId/guid/link/title; read, star and archive flags
+     * travel for free because the UPDATE only touches `id`. Gmail newsletters are excluded by
+     * the `sourceType = 'RSS'` join — their ids are `gmail:<messageId>`, built from the
+     * message id and never from a URL, and leaving them alone also leaves their
+     * `newsletter_bodies` rows (which reference `articles.id` by foreign key) untouched; RSS
+     * articles never have a body row. Not a schema change, so the Room version stays at 4.
+     *
+     * Guarded by [REKEY_FLAG_KEY], set inside this same transaction, so a process death
+     * mid-run re-runs the whole thing and a completed run is never repeated.
+     */
+    @Transaction
+    suspend fun rekeyRssArticleIdsOnce() {
+        if (getMetadata(REKEY_FLAG_KEY) != null) return
+        rssArticleIdentities()
+            .groupBy { RssParser.stableArticleId(it.feedId, it.guid, it.link, it.title) }
+            .forEach { (newId, claimants) ->
+                // Collision policy: several old rows landing on one new id are the same
+                // logical article stored more than once under different effective URLs. One
+                // survives — the copy the reader acted on outranks the merely newer one
+                // (starred, then archived, then read, then freshest) — and the rest are
+                // deleted, because nothing will ever generate their old ids again.
+                val keep = claimants.maxWithOrNull(
+                    compareBy(
+                        { it.isStarred },
+                        { it.isArchived },
+                        { it.isRead },
+                        { it.insertedAt },
+                        { it.id },
+                    ),
+                ) ?: return@forEach
+                claimants.filter { it.id != keep.id }.forEach { deleteArticleForRekey(it.id) }
+                // A new id matching an unrelated existing row would be a SHA-256 collision;
+                // skip that one row rather than abort the transaction on the primary key.
+                if (keep.id != newId && countArticlesWithId(newId) == 0) {
+                    rewriteArticleId(keep.id, newId)
+                }
+            }
+        putMetadata(AppMetadataEntity(REKEY_FLAG_KEY, "1"))
+    }
+
+    companion object {
+        /** Present in app_metadata once [rekeyRssArticleIdsOnce] has run. */
+        const val REKEY_FLAG_KEY = "rss_article_ids_rekeyed"
     }
 }
 

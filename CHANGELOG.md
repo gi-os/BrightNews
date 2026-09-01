@@ -4,6 +4,28 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 2.8.0 - 2026-09-01
+
+### Fixed
+
+- A feed whose redirect target varies — mirror rotation, tracking parameters, an
+  http-to-https bounce — reappeared unread on every refresh. `stableArticleId` hashed the
+  fetch's post-redirect effective URL, and `updateFeedAfterRefresh` rewrote the stored feed
+  URL to it each time, so every article regenerated its id and read/starred/archived state
+  was orphaned. An article's identity is now built from the feed's database id — it belongs
+  to the feed you subscribed to, not to whichever mirror answered. Adding a feed inserts the
+  feed row first so first articles are keyed with the real id.
+- Refreshes no longer overwrite the stored feed URL: the address you subscribed with is the
+  one the app keeps and fetches from. Title, siteUrl, description, ETag/Last-Modified and
+  the fetch time still update as before.
+- Existing RSS articles are re-keyed once, in place, on the first launch after the update:
+  a flagged one-transaction migration (`rekeyRssArticleIdsOnce`, no schema change, Room
+  stays at version 4) recomputes each row's id from its own feedId/guid/link/title. Read,
+  starred and archived travel with the row. Rows the old scheme had duplicated under
+  different URLs collapse to one — the copy the reader acted on (starred, then archived,
+  then read, then newest) survives. Gmail newsletters (`gmail:` ids, message-id identity)
+  are excluded, which also leaves their `newsletter_bodies` foreign keys untouched.
+
 ## 2.7.0 - 2026-09-01
 
 ### Fixed

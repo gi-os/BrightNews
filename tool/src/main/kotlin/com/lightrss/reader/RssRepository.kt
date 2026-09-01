@@ -408,6 +408,10 @@ class RssRepository(
     }
 
     suspend fun initialize() {
+        // One-time data migration, before any refresh can write rows under the old scheme:
+        // ids used to hash the fetch's effective URL, and this re-keys every RSS article onto
+        // the feed's database id. Guarded by its own flag, so it is a no-op ever after.
+        dao.rekeyRssArticleIdsOnce()
         // Published before anything reads it, so the newsletters section can render its
         // signed-in state without suspending on the first frame.
         newsletters.auth.refreshState()
@@ -427,6 +431,8 @@ class RssRepository(
         val loaded = result as? FeedLoadResult.Loaded
             ?: throw IllegalStateException("The feed was not available.")
         dao.getFeedByUrl(loaded.feedUrl)?.let { throw IllegalArgumentException("You already follow this feed.") }
+        // Articles are built after the insert, because their ids hash the feed's database id
+        // and that id does not exist until the feed row does.
         return dao.insertFeedWithArticles(
             feed = FeedEntity(
                 title = loaded.feed.title,
@@ -437,7 +443,7 @@ class RssRepository(
                 etag = loaded.etag,
                 lastModified = loaded.lastModified,
             ),
-            articles = loaded.feed.toEntities(feedId = 0, feedUrl = loaded.feedUrl),
+            articles = { feedId -> loaded.feed.toEntities(feedId) },
         )
     }
 
@@ -533,28 +539,30 @@ class RssRepository(
         when (val result = api.load(feed.url, feed.etag, feed.lastModified)) {
             FeedLoadResult.NotModified -> dao.markFeedNotModified(feed.id, System.currentTimeMillis())
             is FeedLoadResult.Loaded -> {
+                // The fetch's effective URL is deliberately not stored: the address the reader
+                // subscribed with is the feed's identity, and rewriting it to wherever this
+                // fetch happened to land let a rotating mirror rename the feed every refresh.
                 dao.updateFeedAfterRefresh(
                     feedId = feed.id,
                     title = result.feed.title,
-                    url = result.feedUrl,
                     siteUrl = result.feed.siteUrl,
                     description = result.feed.description,
                     fetchedAt = System.currentTimeMillis(),
                     etag = result.etag,
                     lastModified = result.lastModified,
                 )
-                dao.storeArticles(result.feed.toEntities(feed.id, result.feedUrl))
+                dao.storeArticles(result.feed.toEntities(feed.id))
             }
         }
     }.onFailure { error ->
         dao.setFeedError(feed.id, friendlyMessage(error))
     }
 
-    private fun ParsedFeed.toEntities(feedId: Long, feedUrl: String): List<ArticleUpsert> =
+    private fun ParsedFeed.toEntities(feedId: Long): List<ArticleUpsert> =
         items.distinctBy { it.guid.ifBlank { it.link.ifBlank { it.title } } }.map { item ->
             ArticleUpsert(
                 article = ArticleEntity(
-                    id = RssParser.stableArticleId(feedUrl, item.guid, item.link, item.title),
+                    id = RssParser.stableArticleId(feedId, item.guid, item.link, item.title),
                     feedId = feedId,
                     guid = item.guid,
                     title = item.title.take(MAX_TITLE_LENGTH),

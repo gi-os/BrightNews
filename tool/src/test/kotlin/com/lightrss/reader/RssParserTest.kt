@@ -77,11 +77,34 @@ class RssParserTest {
 
     @Test
     fun stableIdsAreFeedScoped() {
-        val first = RssParser.stableArticleId("https://a.example/feed", "42", "", "Post")
-        val same = RssParser.stableArticleId("https://a.example/feed", "42", "", "Post")
-        val otherFeed = RssParser.stableArticleId("https://b.example/feed", "42", "", "Post")
+        val first = RssParser.stableArticleId(1L, "42", "", "Post")
+        val same = RssParser.stableArticleId(1L, "42", "", "Post")
+        val otherFeed = RssParser.stableArticleId(2L, "42", "", "Post")
         assertEquals(first, same)
         assertNotEquals(first, otherFeed)
+    }
+
+    @Test
+    fun stableIdsDoNotDependOnWhereTheFetchCameFrom() {
+        // The id is a pure function of the row: feedId plus guid (falling back to link, then
+        // title). The one-time re-key recomputes exactly this from each stored article, so an
+        // old row maps to one deterministic new id no matter which mirror once served it —
+        // and a guid change is still a different article.
+        val id = RssParser.stableArticleId(7L, "guid-9", "https://a.example/post", "Title")
+        assertEquals(64, id.length, "ids stay sha-256 hex")
+        assertEquals(id, RssParser.stableArticleId(7L, "guid-9", "https://a.example/post", "Title"))
+        assertNotEquals(id, RssParser.stableArticleId(7L, "guid-10", "https://a.example/post", "Title"))
+    }
+
+    @Test
+    fun stableIdsFallBackFromGuidToLinkToTitle() {
+        val byLink = RssParser.stableArticleId(3L, "", "https://x.example/one", "Post")
+        // With no guid the link is the identity, so a retitled item keeps its id...
+        assertEquals(byLink, RssParser.stableArticleId(3L, "", "https://x.example/one", "Renamed"))
+        // ...and with neither, the title is all that is left.
+        val byTitle = RssParser.stableArticleId(3L, "", "", "Post")
+        assertEquals(byTitle, RssParser.stableArticleId(3L, "", "", "Post"))
+        assertNotEquals(byLink, byTitle)
     }
 
     @Test

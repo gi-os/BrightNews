@@ -191,8 +191,16 @@ object RssParser {
         return null
     }
 
-    fun stableArticleId(feedUrl: String, guid: String, link: String, title: String): String {
-        val source = "$feedUrl\u0000${guid.ifBlank { link.ifBlank { title } }}"
+    /**
+     * An article's identity, scoped to the feed row it belongs to.
+     *
+     * The first ingredient is the feed's database id rather than any URL on purpose. This used
+     * to hash the fetch's post-redirect effective URL, so a feed that answers from a different
+     * address on different fetches — mirror rotation, tracking parameters, an http-to-https
+     * bounce — regenerated every id and the whole feed reappeared unread. The row id never moves.
+     */
+    fun stableArticleId(feedId: Long, guid: String, link: String, title: String): String {
+        val source = "$feedId\u0000${guid.ifBlank { link.ifBlank { title } }}"
         return MessageDigest.getInstance("SHA-256")
             .digest(source.toByteArray(Charsets.UTF_8))
             .joinToString("") { byte -> "%02x".format(byte) }

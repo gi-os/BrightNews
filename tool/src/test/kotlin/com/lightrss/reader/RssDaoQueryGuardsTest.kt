@@ -40,9 +40,11 @@ class RssDaoQueryGuardsTest {
 
     @Test
     fun `every bulk delete of articles exempts the archive`() {
-        // Signing a mailbox out is the one deliberate exception: the issues are somebody else's
-        // mail and the account that authorised them is gone, archive included.
-        val allowed = setOf("deleteAllNewsletters")
+        // Signing a mailbox out is a deliberate exception: the issues are somebody else's
+        // mail and the account that authorised them is gone, archive included. The re-key
+        // delete is the other: it removes one duplicate row of an article that survives under
+        // its kept id, so nothing the reader archived disappears from the archive.
+        val allowed = setOf("deleteAllNewsletters", "deleteArticleForRekey")
         daoQueries()
             .filter { (name, sql) -> "DELETE FROM articles" in sql && name !in allowed }
             .forEach { (name, sql) ->
