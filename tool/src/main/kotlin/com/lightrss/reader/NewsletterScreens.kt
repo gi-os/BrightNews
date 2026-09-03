@@ -724,7 +724,7 @@ private fun LabelList(
                     .height(rowHeight.gridUnitsAsDp())
                     .lightClickable(onClickLabel = label.name, role = Role.Button) { onPick(label) }
                     .padding(
-                        horizontal = 1f.gridUnitsAsDp(),
+                        horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
                         vertical = LABEL_ROW_PADDING_UNITS.gridUnitsAsDp(),
                     ),
             ) {
@@ -748,9 +748,9 @@ private fun LabelList(
 // The scroll bar needs every row the same height, and a label name is allowed two lines of it.
 // The height itself is measured in stackedRowHeightGridUnits; this is only its floor.
 private const val LABEL_TITLE_MAX_LINES = 2
-private const val LABEL_ROW_GAP_UNITS = 0.25f
-private const val LABEL_ROW_PADDING_UNITS = 0.5f
-private const val LABEL_ROW_MIN_HEIGHT = 3.6f
+private const val LABEL_ROW_GAP_UNITS = 0.4f
+private const val LABEL_ROW_PADDING_UNITS = 1f
+private const val LABEL_ROW_MIN_HEIGHT = 5f
 
 /**
  * Google's consent page, in a WebView the tool owns.

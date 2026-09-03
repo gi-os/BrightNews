@@ -325,6 +325,14 @@ class RssRepository(
     fun observeArchived(): Flow<List<ArticleRow>> = dao.observeArchived()
     fun observeFeeds(source: String? = null): Flow<List<FeedRow>> = dao.observeFeeds(source)
     fun observeKagiFeeds(): Flow<List<FeedRow>> = dao.observeKagiFeeds()
+
+    /** The article after [article] in its feed, in list order; null at the end. */
+    suspend fun nextInFeed(article: ArticleEntity): ArticleEntity? =
+        dao.nextInFeed(article.feedId, article.id, article.publishedAt, article.insertedAt)
+
+    /** The article before [article] in its feed; null at the start. */
+    suspend fun previousInFeed(article: ArticleEntity): ArticleEntity? =
+        dao.previousInFeed(article.feedId, article.id, article.publishedAt, article.insertedAt)
     fun observeFeed(feedId: Long): Flow<FeedEntity?> = dao.observeFeed(feedId)
     fun observeFeedArticles(feedId: Long): Flow<List<ArticleRow>> = dao.observeFeedArticles(feedId)
     fun observeArticle(articleId: String): Flow<ArticleRow?> = dao.observeArticle(articleId)

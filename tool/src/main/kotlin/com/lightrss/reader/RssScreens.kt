@@ -1,7 +1,10 @@
 package com.lightrss.reader
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +26,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.lightrss.reader.hw.WheelScroll
 import com.lightrss.reader.hw.WheelKeys
 import com.thelightphone.sdk.InitialScreen
@@ -404,8 +408,8 @@ class AddFeedChooserScreen(
                 }
                 Column(
                     modifier = Modifier.padding(
-                        start = 1f.gridUnitsAsDp(),
-                        end = 1f.gridUnitsAsDp(),
+                        start = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
+                        end = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
                         top = 1f.gridUnitsAsDp(),
                     ),
                 ) {
@@ -606,6 +610,14 @@ class FeedScreen(
                     onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
                     imageStore = imageStore,
+                    // Kagi reads category by category; turning off the end of one is the
+                    // same request as the NEXT button.
+                    onEdge = { direction ->
+                        val target = nextKagi
+                        if (direction > 0 && isKagi && target != null) {
+                            navigateTo({ FeedScreen(it, target.id, repository) })
+                        }
+                    },
                 )
                 val unfollow = LightBarButton.LightIcon(
                     LightIcons.DELETE,
@@ -864,11 +876,17 @@ class ReaderScreen(
         val colors by LightThemeController.colors.collectAsState()
         val row by viewModel.article.collectAsState()
         val fetchingFullText by viewModel.fetchingFullText.collectAsState()
+        val next by viewModel.next.collectAsState()
+        val previous by viewModel.previous.collectAsState()
+        val turned by viewModel.turned.collectAsState()
         val article = row?.article
         val imageStore = rememberImageStore(repository)
         val colour by repository.colourEnabled.collectAsState(initial = true)
         val scroll = rememberScrollState()
         val isKagi = article?.guid?.startsWith("kagi:") == true
+
+        // A turned page starts at the top.
+        LaunchedEffect(turned) { if (turned > 0) scroll.scrollTo(0) }
 
         // Only while there is actually something to see in colour. An article the feed gave no
         // picture for has nothing but white-on-black type on screen, and lifting the whole
@@ -876,7 +894,9 @@ class ReaderScreen(
         ColourEffect(colour && imageStore != null && article?.let { it.imageUrl.isNotBlank() || it.contentBlocks.isNotBlank() } == true)
 
         WheelKeys()
-        WheelScroll(scroll)
+        // Off the bottom and keep turning: the next article in this feed, here, in place. Off
+        // the top: the previous one. Three notches past the end, so an overshoot does nothing.
+        val wheelEdge = WheelScroll(scroll, onEdge = { direction -> viewModel.turn(direction) })
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -896,7 +916,15 @@ class ReaderScreen(
                         },
                     ),
                 )
-                StatusLine(if (fetchingFullText) "FETCHING THE WHOLE ARTICLE…" else null)
+                StatusLine(
+                    when {
+                        fetchingFullText -> "FETCHING THE WHOLE ARTICLE…"
+                        wheelEdge.edge > 0 && next != null -> "TURN AGAIN FOR: ${next?.title}"
+                        wheelEdge.edge < 0 && previous != null -> "TURN AGAIN FOR: ${previous?.title}"
+                        wheelEdge.edge > 0 -> "END OF THIS FEED"
+                        else -> null
+                    },
+                )
                 if (article == null) {
                     EmptyState("Loading article…", Modifier.weight(1f))
                 } else {
@@ -908,83 +936,61 @@ class ReaderScreen(
                     ) {
                         Column(
                             modifier = Modifier.padding(
-                                start = 1f.gridUnitsAsDp(),
-                                end = 1f.gridUnitsAsDp(),
-                                bottom = 2f.gridUnitsAsDp(),
+                                start = READER_MARGIN_UNITS.gridUnitsAsDp(),
+                                end = READER_MARGIN_UNITS.gridUnitsAsDp(),
+                                bottom = 3f.gridUnitsAsDp(),
                             ),
                         ) {
                             LightText(
                                 text = article.title,
-                                variant = LightTextVariant.Subheading,
+                                variant = LightTextVariant.Heading,
                                 maxLines = 6,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
+                                modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
                             )
+                            // One byline. The bar already names the feed, and the source list
+                            // or the OPEN row already names the site, so this is the author
+                            // and the date and nothing else.
                             LightText(
                                 text = listOfNotNull(
                                     article.author.takeIf { it.isNotBlank() },
                                     fullDate(article.publishedAt),
                                 ).joinToString(" · "),
-                                variant = LightTextVariant.Superfine,
+                                variant = LightTextVariant.Fine,
                                 lighten = true,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+                                modifier = Modifier.padding(top = 0.75f.gridUnitsAsDp()),
                             )
-                            ArticleBody(
-                                article = article,
-                                imageStore = imageStore,
-                                modifier = Modifier.fillMaxWidth(),
-                                onLink = { link ->
-                                    navigateTo({
-                                        ReaderPageScreen(it, article.id + ":" + link.url.hashCode(), link.url, link.text, repository)
-                                    })
-                                },
-                            )
-                            val source = if (isKagi) "" else sourceHost(article.link)
-                            if (source.isNotBlank()) {
-                                LightText(
-                                    text = source,
-                                    variant = LightTextVariant.Superfine,
-                                    lighten = true,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(top = 1.25f.gridUnitsAsDp()),
+                            ReaderType {
+                                ArticleBody(
+                                    article = article,
+                                    imageStore = imageStore,
+                                    modifier = Modifier.fillMaxWidth().padding(top = 0.5f.gridUnitsAsDp()),
+                                    onLink = { link ->
+                                        navigateTo({
+                                            ReaderPageScreen(it, article.id + ":" + link.url.hashCode(), link.url, link.text, repository)
+                                        })
+                                    },
                                 )
                             }
 
-                            // Actions sit at the end of the article rather than in a fixed bar, the
-                            // way the reader-mode page does, so the text gets the whole screen.
+                            // Actions sit at the end of the article rather than in a fixed bar,
+                            // so the text gets the whole screen — but as one line of buttons,
+                            // not three more rows that look like more article.
                             val link = article.link
-                            if (link.isNotBlank() && !isKagi) {
-                                val hasFullText = article.readerBlocks.isNotBlank() &&
-                                    article.readerBlocks != RssRepository.FULL_TEXT_UNAVAILABLE
-                                SettingsRow(
-                                    title = "OPEN",
-                                    detail = if (hasFullText) "Fetch the page again" else "Read the full page here",
-                                ) {
-                                    navigateTo({
-                                        ReaderPageScreen(it, article.id, link, article.title, repository)
-                                    })
-                                }
-                            }
-                            SettingsRow(
-                                title = if (article.isRead) "MARK UNREAD" else "MARK READ",
-                                detail = if (article.isRead) {
-                                    "Put it back in the unread list"
-                                } else {
-                                    "Take it out of the unread list"
+                            ArticleActions(
+                                actions = buildList {
+                                    if (link.isNotBlank() && !isKagi) {
+                                        add("OPEN" to {
+                                            navigateTo({
+                                                ReaderPageScreen(it, article.id, link, article.title, repository)
+                                            })
+                                        })
+                                    }
+                                    add((if (article.isRead) "UNREAD" else "READ") to viewModel::toggleRead)
+                                    add((if (article.isArchived) "RESTORE" else "ARCHIVE") to { viewModel.toggleArchived { goBack() } })
                                 },
-                                onClick = viewModel::toggleRead,
-                            )
-                            SettingsRow(
-                                title = if (article.isArchived) "RESTORE" else "ARCHIVE",
-                                detail = if (article.isArchived) {
-                                    "Put it back in your lists"
-                                } else {
-                                    "Hide it from your lists — the Archive keeps it"
-                                },
-                                onClick = { viewModel.toggleArchived { goBack() } },
                             )
                         }
                     }
@@ -1043,16 +1049,16 @@ class ReaderPageScreen(
                     ) {
                         Column(
                             modifier = Modifier.padding(
-                                start = 1f.gridUnitsAsDp(),
-                                end = 1f.gridUnitsAsDp(),
-                                bottom = 2f.gridUnitsAsDp(),
+                                start = READER_MARGIN_UNITS.gridUnitsAsDp(),
+                                end = READER_MARGIN_UNITS.gridUnitsAsDp(),
+                                bottom = 3f.gridUnitsAsDp(),
                             ),
                         ) {
                             if (page != null) {
                                 LightText(
                                     text = page.title.ifBlank { fallbackTitle },
-                                    variant = LightTextVariant.Subheading,
-                                    modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
+                                    variant = LightTextVariant.Heading,
+                                    modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
                                 )
                                 val credit = listOf(page.byline, sourceHost(link))
                                     .filter { it.isNotBlank() }
@@ -1060,18 +1066,20 @@ class ReaderPageScreen(
                                 if (credit.isNotBlank()) {
                                     LightText(
                                         text = credit,
-                                        variant = LightTextVariant.Superfine,
+                                        variant = LightTextVariant.Fine,
                                         lighten = true,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
+                                        modifier = Modifier.padding(top = 0.75f.gridUnitsAsDp()),
                                     )
                                 }
-                                ContentBlocksBody(
-                                    blocks = page.blocks,
-                                    imageStore = imageStore,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+                                ReaderType {
+                                    ContentBlocksBody(
+                                        blocks = page.blocks,
+                                        imageStore = imageStore,
+                                        modifier = Modifier.fillMaxWidth().padding(top = 0.5f.gridUnitsAsDp()),
+                                    )
+                                }
                             } else {
                                 LightText(
                                     text = state.error ?: "That page could not be opened.",
@@ -1198,7 +1206,7 @@ class SettingsScreen(
                             if (confirmed) viewModel.clearRead()
                         }
                     }
-                    Column(modifier = Modifier.padding(1f.gridUnitsAsDp())) {
+                    Column(modifier = Modifier.padding(SIDE_MARGIN_UNITS.gridUnitsAsDp())) {
                         LightText("ABOUT", LightTextVariant.Superfine, lighten = true)
                         LightText(
                             text = "Offline RSS, Atom and Gmail newsletters in one list. No app " +
@@ -1270,16 +1278,55 @@ internal fun SettingsRow(title: String, detail: String, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .lightClickable(onClickLabel = title, role = Role.Button) { onClick() }
-            .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.75f.gridUnitsAsDp()),
+            .lightClickable(onClickLabel = title, role = Role.Button) { onClick() },
     ) {
-        LightText(title, LightTextVariant.Paragraph)
-        LightText(
-            detail,
-            LightTextVariant.Superfine,
-            lighten = true,
-            modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
+        Column(
+            modifier = Modifier.padding(
+                horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
+                vertical = ROW_PADDING_UNITS.gridUnitsAsDp(),
+            ),
+        ) {
+            LightText(title, LightTextVariant.Paragraph)
+            LightText(
+                detail,
+                LightTextVariant.Fine,
+                lighten = true,
+                modifier = Modifier.padding(top = 0.35f.gridUnitsAsDp()),
+            )
+        }
+        HairlineDivider()
+    }
+}
+
+/**
+ * The end-of-article controls: up to three labels on one line under a rule, spaced across the
+ * reading width. Set in Detail rather than the SDK's Button type because three 30sp words do not
+ * fit across this panel side by side.
+ */
+@Composable
+internal fun ArticleActions(actions: List<Pair<String, () -> Unit>>) {
+    Column(modifier = Modifier.padding(top = SECTION_GAP_UNITS.gridUnitsAsDp())) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(LightThemeTokens.colors.contentSecondary.copy(alpha = 0.35f)),
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            actions.forEach { (label, onClick) ->
+                LightText(
+                    text = label,
+                    variant = LightTextVariant.Detail,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .lightClickable(onClickLabel = label, role = Role.Button) { onClick() }
+                        .padding(vertical = 1f.gridUnitsAsDp(), horizontal = 0.25f.gridUnitsAsDp()),
+                )
+            }
+        }
     }
 }
 
@@ -1289,9 +1336,17 @@ internal fun LoadingScreen(message: String, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .background(LightThemeTokens.colors.background),
-        contentAlignment = Alignment.Center,
     ) {
-        LightText(message, LightTextVariant.Paragraph, lighten = true)
+        LightText(
+            text = message,
+            variant = LightTextVariant.Paragraph,
+            lighten = true,
+            modifier = Modifier.padding(
+                start = READER_MARGIN_UNITS.gridUnitsAsDp(),
+                end = READER_MARGIN_UNITS.gridUnitsAsDp(),
+                top = 4f.gridUnitsAsDp(),
+            ),
+        )
     }
 }
 

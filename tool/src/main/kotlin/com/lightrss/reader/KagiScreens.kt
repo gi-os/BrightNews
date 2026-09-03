@@ -244,14 +244,15 @@ class KagiPickerScreen(
 private fun PickerHeader(title: String) {
     LightText(
         text = title.uppercase(Locale.US),
-        variant = LightTextVariant.Superfine,
+        variant = LightTextVariant.Fine,
         lighten = true,
-        modifier = Modifier.padding(start = 1f.gridUnitsAsDp(), end = 1f.gridUnitsAsDp(), top = 1.25f.gridUnitsAsDp(), bottom = 0.25f.gridUnitsAsDp()),
+        modifier = Modifier.padding(start = SIDE_MARGIN_UNITS.gridUnitsAsDp(), end = SIDE_MARGIN_UNITS.gridUnitsAsDp(), top = 2f.gridUnitsAsDp(), bottom = 0.4f.gridUnitsAsDp()),
     )
 }
 
 @Composable
 private fun PickerParent(line: PickerLine.Parent, onClick: () -> Unit) {
+    Column {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -259,7 +260,7 @@ private fun PickerParent(line: PickerLine.Parent, onClick: () -> Unit) {
                 onClickLabel = if (line.expanded) "Collapse ${line.title}" else "Expand ${line.title}",
                 role = Role.Button,
             ) { onClick() }
-            .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.6f.gridUnitsAsDp()),
+            .padding(horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp(), vertical = 1.25f.gridUnitsAsDp()),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LightText(
@@ -275,6 +276,8 @@ private fun PickerParent(line: PickerLine.Parent, onClick: () -> Unit) {
             lighten = true,
         )
     }
+    HairlineDivider()
+    }
 }
 
 @Composable
@@ -289,10 +292,10 @@ private fun PickerItem(line: PickerLine.Item, followed: Boolean, adding: Boolean
                 enabled = !followed && !adding,
             ) { onClick() }
             .padding(
-                start = if (line.indented) 2.25f.gridUnitsAsDp() else 1f.gridUnitsAsDp(),
-                end = 1f.gridUnitsAsDp(),
-                top = 0.6f.gridUnitsAsDp(),
-                bottom = 0.6f.gridUnitsAsDp(),
+                start = if (line.indented) (SIDE_MARGIN_UNITS + 1.5f).gridUnitsAsDp() else SIDE_MARGIN_UNITS.gridUnitsAsDp(),
+                end = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
+                top = if (line.indented) 0.8f.gridUnitsAsDp() else 1f.gridUnitsAsDp(),
+                bottom = if (line.indented) 0.8f.gridUnitsAsDp() else 1f.gridUnitsAsDp(),
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {

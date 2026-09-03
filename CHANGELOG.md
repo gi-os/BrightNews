@@ -4,6 +4,24 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 2.10.0 - 2026-09-03
+
+### Changed
+
+- Spacing refresh. Shared constants in `RssUi.kt` (`SIDE_MARGIN_UNITS` 1.5, `READER_MARGIN_UNITS`
+  1.75, `ROW_PADDING_UNITS` 1.1, `PARAGRAPH_GAP_UNITS` 1.4, `SECTION_GAP_UNITS` 2.25). Article
+  rows 6 units minimum with 0.9 padding and a right-edge 3.6×3.6 thumbnail; feed/label rows 5
+  units with 1.0 padding; `HairlineDivider` under list rows, settings rows and picker parents.
+  Reader title in Heading, byline in Fine, no trailing host line; `ReaderType` supplies a 1.5
+  line-height paragraph/detail typography to article bodies; section headings carry a rule.
+  End-of-article actions are one `ArticleActions` row. `EmptyState`/`LoadingScreen` are
+  top-left content blocks; `StatusLine` in Detail.
+- Wheel (`hw/Wheel.kt`): inter-notch acceleration (`gainFor`), row snap for `LazyListState`
+  when `rowPx` is passed, a 150 ms hold that releases a lone notch instead of dropping it,
+  frame-length-corrected smoothing, and `onEdge`/`WheelEdge` reporting three notches past an
+  end. `ReaderViewModel` holds a mutable current id and turns to `nextInFeed`/`previousInFeed`
+  in place; a Kagi category's list edge opens the next category.
+
 ## 2.9.0 - 2026-09-03
 
 ### Added

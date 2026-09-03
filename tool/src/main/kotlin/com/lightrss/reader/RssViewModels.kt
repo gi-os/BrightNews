@@ -365,34 +365,73 @@ class SearchViewModel(private val repository: RssRepository) : LightViewModel<Un
     fun edit() = _state.update { it.copy(editorOpen = true, editorSession = it.editorSession + 1) }
 }
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ReaderViewModel(
-    private val articleId: String,
+    initialArticleId: String,
     private val repository: RssRepository,
 ) : LightViewModel<Unit>() {
-    val article: StateFlow<ArticleRow?> = repository.observeArticle(articleId)
+    /**
+     * The article on screen. Mutable because the wheel turns pages: running off the end of an
+     * article and turning on moves to the next one in the feed *in this screen*, rather than
+     * stacking a new reader on top — a morning of reading should be one BACK away from the list,
+     * not thirty.
+     */
+    private val currentId = MutableStateFlow(initialArticleId)
+    private val articleId: String get() = currentId.value
+
+    val article: StateFlow<ArticleRow?> = currentId
+        .flatMapLatest { repository.observeArticle(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** Bumped each time the reader moves to another article, so the screen scrolls to the top. */
+    private val _turned = MutableStateFlow(0)
+    val turned: StateFlow<Int> = _turned.asStateFlow()
+
+    /** The articles either side of this one in its feed, for the edge hint and the turn. */
+    private val _next = MutableStateFlow<ArticleEntity?>(null)
+    val next: StateFlow<ArticleEntity?> = _next.asStateFlow()
+    private val _previous = MutableStateFlow<ArticleEntity?>(null)
+    val previous: StateFlow<ArticleEntity?> = _previous.asStateFlow()
 
     /** True while the whole article is being fetched behind the feed's summary. */
     private val _fetchingFullText = MutableStateFlow(false)
     val fetchingFullText: StateFlow<Boolean> = _fetchingFullText.asStateFlow()
 
     init {
-        viewModelScope.launch(Dispatchers.IO) { repository.setRead(articleId, true) }
         viewModelScope.launch(Dispatchers.IO) {
-            // Wait for the row, then fetch the rest of the story if the feed only sent a taste
-            // of it and nothing has fetched it yet. Newsletters and Kagi stories are whole already.
-            val row = article.first { it != null } ?: return@launch
-            if (!repository.fullTextEnabled.first()) return@launch
-            val entity = row.article
-            if (entity.readerBlocks.isNotEmpty() || entity.link.isBlank()) return@launch
-            if (NewsletterSync.isNewsletter(entity.id) || entity.guid.startsWith("kagi:")) return@launch
-            _fetchingFullText.value = true
-            try {
-                repository.fetchFullText(entity)
-            } finally {
-                _fetchingFullText.value = false
+            currentId.collect { id ->
+                repository.setRead(id, true)
+                val row = article.first { it?.article?.id == id } ?: return@collect
+                _next.value = repository.nextInFeed(row.article)
+                _previous.value = repository.previousInFeed(row.article)
+                fetchFullText(row.article)
             }
         }
+    }
+
+    /**
+     * The rest of the story, if the feed only sent a taste of it and nothing has fetched it yet.
+     * Newsletters and Kagi stories are whole already.
+     */
+    private suspend fun fetchFullText(entity: ArticleEntity) {
+        if (!repository.fullTextEnabled.first()) return
+        if (entity.readerBlocks.isNotEmpty() || entity.link.isBlank()) return
+        if (NewsletterSync.isNewsletter(entity.id) || entity.guid.startsWith("kagi:")) return
+        _fetchingFullText.value = true
+        try {
+            repository.fetchFullText(entity)
+        } finally {
+            _fetchingFullText.value = false
+        }
+    }
+
+    /** Turn to the next article in the feed (`+1`) or the previous one (`-1`). */
+    fun turn(direction: Int) {
+        val target = (if (direction > 0) _next.value else _previous.value) ?: return
+        _next.value = null
+        _previous.value = null
+        currentId.value = target.id
+        _turned.update { it + 1 }
     }
 
     fun toggleStar() {

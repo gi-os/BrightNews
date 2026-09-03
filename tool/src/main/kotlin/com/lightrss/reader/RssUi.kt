@@ -24,6 +24,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.thelightphone.sdk.ui.LightTheme
 import com.lightrss.reader.hw.WheelScroll
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
@@ -50,13 +53,14 @@ fun ArticleList(
     modifier: Modifier = Modifier,
     imageStore: ArticleImageStore? = null,
     listState: LazyListState = rememberLazyListState(),
+    onEdge: ((direction: Int) -> Unit)? = null,
 ) {
     if (articles.isEmpty()) {
         EmptyState(emptyMessage, modifier)
         return
     }
-    WheelScroll(listState)
     val rowHeight = articleRowHeightGridUnits()
+    WheelScroll(listState, rowPx = rowHeight.gridUnitsAsDp().toPxHere(), onEdge = onEdge)
     LightLazyScrollView(
         modifier = modifier,
         listState = listState,
@@ -113,28 +117,24 @@ private fun ArticleListRow(
     heightGridUnits: Float,
 ) {
     val article = row.article
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(heightGridUnits.gridUnitsAsDp())
             .lightClickable(
                 onClickLabel = if (article.isRead) "Open article" else "Open unread article",
                 role = Role.Button,
-            ) { onOpen(row) }
+            ) { onOpen(row) },
+    ) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
             .padding(
-                horizontal = 1f.gridUnitsAsDp(),
+                horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
                 vertical = ROW_VERTICAL_PADDING_UNITS.gridUnitsAsDp(),
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (imageStore != null && article.imageUrl.isNotBlank()) {
-            ArticleThumbnail(
-                imageStore = imageStore,
-                url = article.imageUrl,
-                lighten = article.isRead,
-                modifier = Modifier.padding(end = 0.75f.gridUnitsAsDp()),
-            )
-        }
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.Center,
@@ -175,7 +175,55 @@ private fun ArticleListRow(
                 )
             }
         }
+        // The picture sits at the edge, square and small, so the title keeps the width. A wide
+        // thumbnail on the left pushed every headline into a narrow column.
+        if (imageStore != null && article.imageUrl.isNotBlank()) {
+            ArticleThumbnail(
+                imageStore = imageStore,
+                url = article.imageUrl,
+                lighten = article.isRead,
+                modifier = Modifier.padding(start = 1f.gridUnitsAsDp()),
+            )
+        }
     }
+    HairlineDivider(Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/** A dp value in pixels, at the current density. */
+@Composable
+private fun androidx.compose.ui.unit.Dp.toPxHere(): Float = with(LocalDensity.current) { toPx() }
+
+/**
+ * A one-pixel rule at a quarter strength. Rows and settings groups sit on these, which is what
+ * lets the spacing between them be generous without the list turning into soup.
+ */
+@Composable
+fun HairlineDivider(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp())
+            .height(1.dp)
+            .background(LightThemeTokens.colors.contentSecondary.copy(alpha = 0.25f)),
+    )
+}
+
+/**
+ * Article typography: the SDK's paragraph, with more air between the lines. Lists keep the
+ * SDK's 1.25 leading, where a row is two lines and tighter is fine; a page of copy wants 1.5.
+ */
+@Composable
+fun ReaderType(content: @Composable () -> Unit) {
+    val typography = LightThemeTokens.typography
+    val paragraph = typography.paragraph
+    val relaxed = remember(typography) {
+        typography.copy(
+            paragraph = paragraph.copy(lineHeight = (paragraph.fontSize.value * READER_LINE_HEIGHT).sp),
+            detail = typography.detail.copy(lineHeight = (typography.detail.fontSize.value * READER_LINE_HEIGHT).sp),
+        )
+    }
+    LightTheme(colors = LightThemeTokens.colors, typography = relaxed, content = content)
 }
 
 /**
@@ -252,7 +300,7 @@ fun ArticleBody(
                 text = text.ifBlank { "This feed did not include article text." },
                 variant = LightTextVariant.Paragraph,
                 lighten = text.isBlank(),
-                modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
+                modifier = Modifier.padding(top = PARAGRAPH_GAP_UNITS.gridUnitsAsDp()),
             )
             return@Column
         }
@@ -273,19 +321,33 @@ fun ContentBlocksBody(
     onLink: ((ContentBlock.Link) -> Unit)? = null,
 ) {
     Column(modifier = modifier) {
-        blocks.forEach { block ->
+        blocks.forEachIndexed { index, block ->
+            // A block straight under its section heading sits close to it; everything else
+            // gets a full paragraph gap.
+            val afterHeading = index > 0 && blocks[index - 1] is ContentBlock.Heading
+            val gap = if (afterHeading) AFTER_HEADING_GAP_UNITS else PARAGRAPH_GAP_UNITS
             when (block) {
                 is ContentBlock.Text -> LightText(
                     text = block.text,
                     variant = LightTextVariant.Paragraph,
-                    modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
+                    modifier = Modifier.padding(top = gap.gridUnitsAsDp()),
                 )
-                is ContentBlock.Heading -> LightText(
-                    text = block.text.uppercase(Locale.US),
-                    variant = LightTextVariant.Superfine,
-                    lighten = true,
-                    modifier = Modifier.padding(top = 1.5f.gridUnitsAsDp()),
-                )
+                is ContentBlock.Heading -> Column(modifier = Modifier.padding(top = SECTION_GAP_UNITS.gridUnitsAsDp())) {
+                    // A rule over the label, so a section reads as a section and not as a
+                    // small grey word that happened to land between two paragraphs.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(LightThemeTokens.colors.contentSecondary.copy(alpha = 0.35f)),
+                    )
+                    LightText(
+                        text = block.text.uppercase(Locale.US),
+                        variant = LightTextVariant.Fine,
+                        lighten = true,
+                        modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
+                    )
+                }
                 is ContentBlock.Link -> {
                     val clickable = if (onLink != null) {
                         Modifier.lightClickable(onClickLabel = "Open ${block.text}", role = Role.Button) {
@@ -298,7 +360,7 @@ fun ContentBlocksBody(
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(clickable)
-                            .padding(top = 0.6f.gridUnitsAsDp()),
+                            .padding(top = (if (afterHeading) AFTER_HEADING_GAP_UNITS else 0.9f).gridUnitsAsDp()),
                     ) {
                         LightText(
                             text = block.text,
@@ -332,7 +394,7 @@ private fun ArticleImage(imageStore: ArticleImageStore, url: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 1f.gridUnitsAsDp())
+            .padding(top = PARAGRAPH_GAP_UNITS.gridUnitsAsDp())
             .then(if (image == null) Modifier.height(READER_IMAGE_PLACEHOLDER.gridUnitsAsDp()) else Modifier),
     ) {
         if (image != null) {
@@ -361,7 +423,6 @@ fun FeedList(
         EmptyState("No subscriptions yet.\n\nTap + to add a website or feed.", modifier)
         return
     }
-    WheelScroll(listState)
     // Measured, not hand-tuned: the same one-line-over-superfine stack that clipped in the
     // article and Gmail label lists, so it gets the same helper. The constant is only a floor.
     val rowHeight = stackedRowHeightGridUnits(
@@ -370,19 +431,25 @@ fun FeedList(
         gapUnits = FEED_ROW_GAP_UNITS,
         minimumUnits = FEED_ROW_MIN_HEIGHT,
     )
+    WheelScroll(listState, rowPx = rowHeight.gridUnitsAsDp().toPxHere())
     LightLazyScrollView(
         modifier = modifier,
         listState = listState,
         uniformItemHeightGridUnits = rowHeight,
     ) {
         items(feeds, key = { it.feed.id }) { row ->
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(rowHeight.gridUnitsAsDp())
-                    .lightClickable(onClickLabel = "Open subscription", role = Role.Button) { onOpen(row) }
+                    .lightClickable(onClickLabel = "Open subscription", role = Role.Button) { onOpen(row) },
+            ) {
+            HairlineDivider(Modifier.align(Alignment.BottomCenter))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
                     .padding(
-                        horizontal = 1f.gridUnitsAsDp(),
+                        horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
                         vertical = FEED_ROW_PADDING_UNITS.gridUnitsAsDp(),
                     ),
                 verticalArrangement = Arrangement.Center,
@@ -406,7 +473,7 @@ fun FeedList(
                     if (row.unreadCount > 0) {
                         LightText(
                             text = row.unreadCount.toString(),
-                            variant = LightTextVariant.Superfine,
+                            variant = LightTextVariant.Detail,
                             modifier = Modifier.padding(start = 1f.gridUnitsAsDp()),
                         )
                     }
@@ -425,24 +492,35 @@ fun FeedList(
                     modifier = Modifier.padding(top = FEED_ROW_GAP_UNITS.gridUnitsAsDp()),
                 )
             }
+            }
         }
     }
 }
 
 @Composable
 fun EmptyState(message: String, modifier: Modifier = Modifier) {
-    Box(
+    // Set like content, not like an error: left-aligned at the reading margin, a few units
+    // down from the bar, in full-strength type. The centred grey paragraph it replaces was the
+    // least visible thing on the screen at the moment there was nothing else to look at.
+    val parts = message.split("\n\n", limit = 2)
+    Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 3f.gridUnitsAsDp()),
-        contentAlignment = Alignment.Center,
+            .padding(horizontal = READER_MARGIN_UNITS.gridUnitsAsDp())
+            .padding(top = 4f.gridUnitsAsDp()),
     ) {
         LightText(
-            text = message,
-            variant = LightTextVariant.Paragraph,
-            align = androidx.compose.ui.text.style.TextAlign.Center,
-            lighten = true,
+            text = parts.first(),
+            variant = LightTextVariant.Subheading,
         )
+        if (parts.size > 1) {
+            LightText(
+                text = parts[1],
+                variant = LightTextVariant.Paragraph,
+                lighten = true,
+                modifier = Modifier.padding(top = 1.25f.gridUnitsAsDp()),
+            )
+        }
     }
 }
 
@@ -451,13 +529,13 @@ fun StatusLine(message: String?, modifier: Modifier = Modifier) {
     if (message.isNullOrBlank()) return
     LightText(
         text = message,
-        variant = LightTextVariant.Superfine,
+        variant = LightTextVariant.Detail,
         lighten = true,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 1f.gridUnitsAsDp(), vertical = 0.25f.gridUnitsAsDp()),
+            .padding(horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp(), vertical = 0.4f.gridUnitsAsDp()),
     )
 }
 
@@ -517,16 +595,34 @@ fun sourceHost(url: String): String = runCatching {
     URI(url).host.orEmpty().removePrefix("www.").uppercase(Locale.US)
 }.getOrDefault("")
 
+/**
+ * The spacing the whole app is set to.
+ *
+ * The first release set rows at 0.45 units of vertical padding and every edge at one unit, and
+ * on a panel this size that reads as a spreadsheet: the only thing separating one row from the
+ * next was proximity. These loosen it — fewer rows to a screen, on purpose; the wheel does the
+ * scrolling — and the hairline under each row does the separating, so the space can be space.
+ */
+internal const val SIDE_MARGIN_UNITS = 1.5f
+internal const val READER_MARGIN_UNITS = 1.75f
+internal const val ROW_PADDING_UNITS = 1.1f
+internal const val PARAGRAPH_GAP_UNITS = 1.4f
+internal const val SECTION_GAP_UNITS = 2.25f
+internal const val AFTER_HEADING_GAP_UNITS = 0.5f
+
+/** Body copy reads at this leading in the article, against the SDK's 1.25 in lists. */
+internal const val READER_LINE_HEIGHT = 1.5f
+
 private const val ARTICLE_TITLE_MAX_LINES = 2
-private const val SOURCE_LINE_GAP_UNITS = 0.25f
-private const val ROW_VERTICAL_PADDING_UNITS = 0.45f
-private const val ARTICLE_ROW_MIN_HEIGHT = 4.75f
-private const val THUMBNAIL_WIDTH = 4.4f
+private const val SOURCE_LINE_GAP_UNITS = 0.4f
+private const val ROW_VERTICAL_PADDING_UNITS = 0.9f
+private const val ARTICLE_ROW_MIN_HEIGHT = 6f
+private const val THUMBNAIL_WIDTH = 3.6f
 private const val THUMBNAIL_HEIGHT = 3.6f
 private const val READER_IMAGE_PLACEHOLDER = 6f
 
 // The subscriptions list: one line of paragraph type over a superfine detail line. The height
 // itself is measured in stackedRowHeightGridUnits; this is only its floor.
-private const val FEED_ROW_GAP_UNITS = 0.25f
-private const val FEED_ROW_PADDING_UNITS = 0.45f
-private const val FEED_ROW_MIN_HEIGHT = 3.6f
+private const val FEED_ROW_GAP_UNITS = 0.4f
+private const val FEED_ROW_PADDING_UNITS = 1f
+private const val FEED_ROW_MIN_HEIGHT = 5f

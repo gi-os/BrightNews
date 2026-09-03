@@ -1,43 +1,45 @@
-# News 2.9.0
+# News 2.10.0
 
-**Kagi News is a third section.**
+**Room to read.**
 
-Kagi publishes its whole edition as public JSON — no key, no account: about 190 categories,
-each a dozen stories a day, each story drawn from forty-odd articles and written up with a
-summary, highlights, perspectives, a quote, a timeline and the source list. A category is now a
-feed here, the way a Gmail label already was, so reading, saving, archiving and search all work
-on a Kagi story without knowing where it came from.
+The first release set every row at under half a grid unit of padding and every edge at one
+unit, and on this panel that read as a spreadsheet: proximity was the only thing telling one
+row from the next. Rows are taller now (article rows 6 units, feed and category rows 5, settings
+rows 1.1 units of padding each side), every list sits on a hairline rule so the space can be
+space, and the margins move out to 1.5 units — 1.75 in the article itself. Fewer rows to a
+screen, on purpose; the wheel does the scrolling. The thumbnail moves to the right edge, square
+and small, so a headline keeps the width instead of being pushed into a narrow column.
 
-The Kagi tab on home is the list of categories you follow, with unread counts, because a
-category is meant to be read on its own — twelve stories, done — not shuffled into one long
-list with the others. Inside a category the stories sit in Kagi's own ranking; **NEXT** in the
-bottom bar turns the page to the following category so a morning's reading is one tap per
-section. A story's sources are tappable and open in the reader. Footnote markers
-(`[site.com#3]`) are stripped from the prose since the sources are listed underneath.
+**The article reads like a page.** The title is set in Heading with the byline once beneath it
+— author and date, nothing else; the feed is in the bar and the site is one tap away. Body copy
+gets 1.5 leading against the lists' 1.25, paragraphs 1.4 units apart, and a Kagi story's
+sections (HIGHLIGHTS, PERSPECTIVES, SOURCES…) sit under a rule with real air above them instead
+of a small grey word floating between paragraphs. The three stacked action rows at the end
+(OPEN / MARK READ / ARCHIVE) that looked like more article are one line of buttons under a rule.
+Empty states and status lines are set as content, left-aligned at the reading margin in full
+type, rather than a centred grey paragraph. The Kagi picker's parent rows (USA ▸ 24) are
+visibly parents now, with a rule under each.
 
-**Picking from 190 categories.** The picker shelves them: Kagi's general categories first
-(World, USA, Business, Technology, Science, Sports, Gaming, Bay Area, On This Day), then places
-folded under their parent — USA holds two dozen cities and states, Germany eight regions, and
-the bare countries fold under one row — then the topics alphabetically. Nothing is more than
-two taps deep. A category already followed says so and does not add twice.
+**The wheel.**
 
-**The same story is not stored twice.** A big story lands in World, USA and Middle East on the
-same day. A story already held by another Kagi category from the same edition window is
-skipped; the category refreshed first keeps it. Editions older than a week are trimmed unless
-saved or archived. Refreshes are conditional (ETag / Last-Modified), so a day with no new
-edition costs one small request per category.
+*Acceleration.* A notch was worth a flat 64 dp. Now a notch that lands within 45 ms of the last
+— a flick — covers 2.6×, one within 90 ms 1.7×, within 180 ms 1.2×, and a single deliberate
+click exactly 1×. Nudging a paragraph into view is unchanged; getting past forty source links
+takes two spins instead of eight.
 
-**RSS articles are whole now, not a paragraph and a link.**
+*Rows land whole.* Lists scroll in whole rows but the wheel scrolled in pixels, so it stopped
+with a row cut in half. The glide now settles on the nearest row boundary.
 
-Most feeds send a summary. The reader used to show that, with an OPEN row that fetched the
-page on demand. Now the page is fetched the first time an article is opened — the whole
-story replaces the summary in place, with a status line while it loads — and the newest dozen
-unread articles are fetched ahead of time on every refresh, so most articles open whole and
-offline. The result is stored on the row, so it is never fetched twice, and it survives a
-feed refresh. A paywall, a bot check or a page with no body copy falls back to the feed's
-own text and is not retried on later refreshes; OPEN still tries again on demand. Newsletters
-and Kagi stories are already whole and are left alone. **FULL ARTICLES** in Settings turns
-the fetching off.
+*A lone click is not lost.* The first notch after a pause used to buy nothing until a second
+notch arrived — one deliberate click did nothing, which reads as a broken wheel. It is now held
+for 150 ms and released on its own if nothing follows; a second notch inside that window still
+releases both together, so a stray brush that comes as a pair is treated as before.
 
-Schema moves from version 4 to 5 — one new column, empty until an article is opened. This
-installs over 2.8.0 and keeps every subscription, label, read state and saved article.
+*Turn past the end for the next thing.* At the bottom of an article the wheel used to stop.
+Three more notches now turn to the next article in the feed, in place — no new screen, BACK still
+goes straight to the list — and three at the top go to the previous one. A status line names
+what a further turn will open. At the bottom of a Kagi category, the same gesture is the NEXT
+button. The glide is also corrected for the frame's real length, so a dropped frame on a large
+image no longer halves the smoothing.
+
+No schema change. Installs over 2.9.0 and keeps everything.

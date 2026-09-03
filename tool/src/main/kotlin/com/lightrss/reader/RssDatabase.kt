@@ -719,6 +719,32 @@ interface RssDao {
     )
     suspend fun articlesAwaitingFullText(limit: Int): List<ArticleEntity>
 
+    /**
+     * The article after [this one][publishedAt]/[insertedAt] in its feed's list order, and the
+     * one before it — what the wheel turns to when it runs off the end of an article.
+     */
+    @Query(
+        """
+        SELECT * FROM articles
+        WHERE feedId = :feedId AND isArchived = 0 AND id != :id
+          AND (publishedAt < :publishedAt OR (publishedAt = :publishedAt AND insertedAt < :insertedAt))
+        ORDER BY publishedAt DESC, insertedAt DESC
+        LIMIT 1
+        """,
+    )
+    suspend fun nextInFeed(feedId: Long, id: String, publishedAt: Long, insertedAt: Long): ArticleEntity?
+
+    @Query(
+        """
+        SELECT * FROM articles
+        WHERE feedId = :feedId AND isArchived = 0 AND id != :id
+          AND (publishedAt > :publishedAt OR (publishedAt = :publishedAt AND insertedAt > :insertedAt))
+        ORDER BY publishedAt ASC, insertedAt ASC
+        LIMIT 1
+        """,
+    )
+    suspend fun previousInFeed(feedId: Long, id: String, publishedAt: Long, insertedAt: Long): ArticleEntity?
+
     /* ------------------------------------------------------------------ Kagi */
 
     /**
