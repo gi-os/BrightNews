@@ -5,7 +5,7 @@
 Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,
 Gmail newsletters in another, Kagi News in a third, all read in the same reader. Built on the
 Light SDK; tool id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and
-search stay on the phone. Current release: **v2.10.0** (`tool/lighttool.toml`: versionCode 31).
+search stay on the phone. Current release: **v2.11.0** (`tool/lighttool.toml`: versionCode 32).
 
 ## Install via BrightMarket
 
@@ -294,6 +294,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v2.11.0 | —         | Wheel scrolls on the first notch and stops jumping back at the end; rows use the full width; the scroll bar fades when still; bars hide on down and return only after half a second of up |
 | v2.10.0 | —         | Room to read: taller rows on hairlines, wider margins, 1.5 leading in articles, one line of actions. Wheel: acceleration, row snap, lone clicks kept, turn past the end for the next article or category |
 | v2.9.0  | —         | Kagi News as a third section — categories are feeds, stories carry their highlights, perspectives, timeline and sources; a shelved picker for the 190 categories. RSS articles fetch their whole page on open and ahead of time |
 | v2.8.0  | —         | An article's identity belongs to the feed, not to whichever mirror answered |

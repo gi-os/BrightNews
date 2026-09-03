@@ -24,7 +24,15 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.alpha
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -81,6 +89,30 @@ private data class LightScrollBarGeometry(
     }
 }
 
+/** How long the bar stays after the last movement before it fades. */
+private const val SCROLLBAR_LINGER_MS = 900L
+private const val SCROLLBAR_FADE_MS = 180
+
+/**
+ * The bar's opacity: up while the content is moving and for a moment after, then gone. The gutter
+ * stays reserved, so nothing reflows — the bar simply appears when it has something to say.
+ */
+@Composable
+private fun rememberScrollBarAlpha(scrollOffsetPx: Float): Float {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(scrollOffsetPx) {
+        shown = true
+        delay(SCROLLBAR_LINGER_MS)
+        shown = false
+    }
+    val alpha by animateFloatAsState(
+        targetValue = if (shown) 1f else 0f,
+        animationSpec = tween(SCROLLBAR_FADE_MS),
+        label = "scrollbar",
+    )
+    return alpha
+}
+
 fun scrollBarGutterUnits(position: LightScrollBarPosition): Float = when (position) {
     LightScrollBarPosition.Outside -> SCROLLBAR_WIDTH_UNITS
     LightScrollBarPosition.Inside -> 0f
@@ -100,6 +132,7 @@ fun LightScrollView(
     val scrollOffsetPx by remember { derivedStateOf { scrollState.value.toFloat() } }
     val showScrollBar = scrollState.maxValue > 0
     val contentPaddingEnd = scrollBarGutterUnits(scrollBarPosition)
+    val barAlpha = rememberScrollBarAlpha(scrollOffsetPx)
 
     Box(modifier = modifier) {
         Column(
@@ -124,7 +157,8 @@ fun LightScrollView(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .fillMaxHeight()
-                    .padding(vertical = verticalPadding),
+                    .padding(vertical = verticalPadding)
+                    .alpha(barAlpha),
             )
         }
     }
@@ -159,11 +193,7 @@ fun LightLazyScrollView(
     val scrollPx = scrollMetrics.first
     val maxScrollPx = scrollMetrics.second
     val showScrollBar = maxScrollPx > 0f
-    val contentPaddingEnd = when {
-        !showScrollBar -> 0f
-        scrollBarPosition == LightScrollBarPosition.Outside -> SCROLLBAR_WIDTH_UNITS
-        else -> 0f
-    }
+    val barAlpha = rememberScrollBarAlpha(scrollPx)
 
     fun scrollToOffsetPx(targetPx: Float) {
         if (itemHeightPx <= 0f) return
@@ -192,18 +222,21 @@ fun LightLazyScrollView(
                         .fillMaxHeight()
                         .padding(
                             vertical = SCROLLBAR_INSIDE_VERTICAL_PADDING_UNITS.gridUnitsAsDp(),
-                        ),
+                        )
+                        .alpha(barAlpha),
                 )
             }
         }
     } else {
+        // The bar has its own column, so the list is not padded away from it a second time:
+        // rows run right up to the gutter. The gutter is kept whether or not the bar is up, so
+        // a list that grows past one screen does not shift its rows sideways.
         Row(modifier = modifier) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight()
-                    .padding(end = contentPaddingEnd.gridUnitsAsDp()),
+                    .fillMaxHeight(),
                 content = content,
             )
             if (showScrollBar) {
@@ -211,8 +244,12 @@ fun LightLazyScrollView(
                     contentScrollOffsetPx = scrollPx,
                     maxContentScrollOffsetPx = maxScrollPx,
                     onScrollTo = ::scrollToOffsetPx,
-                    modifier = Modifier.fillMaxHeight(),
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .alpha(barAlpha),
                 )
+            } else {
+                Spacer(modifier = Modifier.width(SCROLLBAR_WIDTH_UNITS.gridUnitsAsDp()))
             }
         }
     }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +52,9 @@ class KagiScreen(
         val colors by LightThemeController.colors.collectAsState()
         val feeds by viewModel.feeds.collectAsState()
 
+        val chrome = rememberChromeVisibility()
+        val listState = rememberLazyListState()
+        ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
         LightTheme(colors = colors) {
             Column(
@@ -58,19 +62,21 @@ class KagiScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                    center = LightTopBarCenter.Text("Kagi News"),
-                    rightButton = LightBarButton.LightIcon(
-                        LightIcons.ADD,
-                        onClick = {
-                            navigateTo({ KagiPickerScreen(it, repository) }) { feedId ->
-                                navigateTo({ FeedScreen(it, feedId, repository) })
-                            }
-                        },
-                        contentDescription = "Follow a category",
-                    ),
-                )
+                ReaderChrome(chrome.visible) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text("Kagi News"),
+                        rightButton = LightBarButton.LightIcon(
+                            LightIcons.ADD,
+                            onClick = {
+                                navigateTo({ KagiPickerScreen(it, repository) }) { feedId ->
+                                    navigateTo({ FeedScreen(it, feedId, repository) })
+                                }
+                            },
+                            contentDescription = "Follow a category",
+                        ),
+                    )
+                }
                 if (feeds.isEmpty()) {
                     EmptyState(
                         "Kagi News is a dozen stories a day per category, each one drawn from " +
@@ -82,26 +88,29 @@ class KagiScreen(
                         feeds = feeds,
                         onOpen = { row -> navigateTo({ FeedScreen(it, row.feed.id, repository) }) },
                         modifier = Modifier.weight(1f),
+                        listState = listState,
                     )
                 }
-                LightBottomBar(
-                    items = listOf(
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.STAR_OUTLINE,
-                            onClick = { navigateTo({ SavedScreen(it, repository) }) },
-                            contentDescription = "Saved articles",
+                ReaderChrome(chrome.visible) {
+                    LightBottomBar(
+                        items = listOf(
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.STAR_OUTLINE,
+                                onClick = { navigateTo({ SavedScreen(it, repository) }) },
+                                contentDescription = "Saved articles",
+                            ),
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.DELETE,
+                                onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
+                                contentDescription = "Archive",
+                            ),
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.SETTINGS,
+                                onClick = { navigateTo({ SettingsScreen(it, repository) }) },
+                            ),
                         ),
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.DELETE,
-                            onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
-                            contentDescription = "Archive",
-                        ),
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.SETTINGS,
-                            onClick = { navigateTo({ SettingsScreen(it, repository) }) },
-                        ),
-                    ),
-                )
+                    )
+                }
             }
         }
     }
@@ -153,6 +162,8 @@ class KagiPickerScreen(
             navigateTo({ MessageScreen(it, message) })
         }
 
+        val chrome = rememberChromeVisibility()
+        ChromeScrollEffect(scroll, chrome)
         WheelKeys()
         LightTheme(colors = colors) {
             Column(
@@ -160,10 +171,12 @@ class KagiPickerScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                    center = LightTopBarCenter.Text("Follow a category"),
-                )
+                ReaderChrome(chrome.visible) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text("Follow a category"),
+                    )
+                }
                 StatusLine(
                     when {
                         state.adding != null -> "FETCHING TODAY'S EDITION…"

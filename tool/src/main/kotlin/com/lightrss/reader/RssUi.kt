@@ -130,8 +130,10 @@ private fun ArticleListRow(
         modifier = Modifier
             .fillMaxSize()
             .padding(
-                horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
-                vertical = ROW_VERTICAL_PADDING_UNITS.gridUnitsAsDp(),
+                start = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
+                end = ROW_END_MARGIN_UNITS.gridUnitsAsDp(),
+                top = ROW_VERTICAL_PADDING_UNITS.gridUnitsAsDp(),
+                bottom = ROW_VERTICAL_PADDING_UNITS.gridUnitsAsDp(),
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -195,15 +197,14 @@ private fun ArticleListRow(
 private fun androidx.compose.ui.unit.Dp.toPxHere(): Float = with(LocalDensity.current) { toPx() }
 
 /**
- * A one-pixel rule at a quarter strength. Rows and settings groups sit on these, which is what
- * lets the spacing between them be generous without the list turning into soup.
+ * A one-pixel rule at a quarter strength, edge to edge. Rows and settings groups sit on these,
+ * which is what lets the spacing between them be generous without the list turning into soup.
  */
 @Composable
 fun HairlineDivider(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp())
             .height(1.dp)
             .background(LightThemeTokens.colors.contentSecondary.copy(alpha = 0.25f)),
     )
@@ -449,8 +450,10 @@ fun FeedList(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
-                        horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
-                        vertical = FEED_ROW_PADDING_UNITS.gridUnitsAsDp(),
+                        start = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
+                        end = ROW_END_MARGIN_UNITS.gridUnitsAsDp(),
+                        top = FEED_ROW_PADDING_UNITS.gridUnitsAsDp(),
+                        bottom = FEED_ROW_PADDING_UNITS.gridUnitsAsDp(),
                     ),
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -604,6 +607,8 @@ fun sourceHost(url: String): String = runCatching {
  * scrolling — and the hairline under each row does the separating, so the space can be space.
  */
 internal const val SIDE_MARGIN_UNITS = 1.5f
+/** List rows end here: the scroll bar's gutter is already a margin, so the row uses the width. */
+internal const val ROW_END_MARGIN_UNITS = 0.75f
 internal const val READER_MARGIN_UNITS = 1.75f
 internal const val ROW_PADDING_UNITS = 1.1f
 internal const val PARAGRAPH_GAP_UNITS = 1.4f

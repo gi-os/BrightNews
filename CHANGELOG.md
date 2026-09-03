@@ -4,6 +4,26 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 2.11.0 - 2026-09-03
+
+### Fixed
+
+- Wheel: the 150 ms first-notch hold is removed (every first turn felt late); `SMOOTHING` 0.28
+  → 0.36. Row snap no longer runs when the list cannot scroll both ways, which was the
+  reverse jump at the end of a list.
+- Chrome: an up-scroll only counts while `canScrollForward`, so a list clamping its offset when
+  the bars hide at the end no longer re-shows them.
+
+### Changed
+
+- `ChromeVisibility` shows the bars only after 500 ms of continuous up-scroll (runs broken by a
+  250 ms pause) or near the top; hides after 40 dp down. Applied to Home, Feed, Feeds, Saved,
+  Archive, Reader, ReaderPage, Kagi list and Kagi picker via `ChromeScrollEffect`.
+- `sdk/ui` `LightLazyScrollView` drops the duplicated end padding in Outside mode and reserves
+  the gutter with a spacer when the bar is hidden; both scroll views fade the bar out 900 ms
+  after the last movement (`rememberScrollBarAlpha`). List rows end 0.75 units from the gutter
+  (`ROW_END_MARGIN_UNITS`); `HairlineDivider` is edge to edge.
+
 ## 2.10.0 - 2026-09-03
 
 ### Changed

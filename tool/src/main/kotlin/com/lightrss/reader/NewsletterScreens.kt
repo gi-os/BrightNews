@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -233,51 +235,64 @@ private fun backgroundFor(mode: RenderMode) =
 private const val NEWSLETTER_BASE = "http://newsletter.invalid/"
 
 /**
- * Whether the reader's bars are showing.
+ * When the bars are up.
  *
- * Together they are seven grid units of a twelve-unit-tall panel's worth of chrome — a fifth of
- * the screen, held permanently, on the one screen in the app whose whole job is to show as much
- * of a document as it can. So they go away while you are reading forwards and come back the
- * moment you are not.
+ * Down hides them, after enough travel to be a scroll and not a twitch. Up brings them back only
+ * after a sustained upward scroll — half a second of it, unbroken by any downward movement — or
+ * near the top of the content. The old rule showed them on twenty pixels of up-scroll, which is
+ * one wheel notch or the slack in a thumb, so they flashed in and out while reading.
  *
- * Two rules keep that from becoming a trap, and both matter more than the hiding does. The bars
- * always return near the top, and they return on any deliberate scroll back up — because the
- * back button lives in the top bar, and a reader who has to guess how to reach it has been given
- * a worse screen, not a bigger one. The upward threshold is deliberately less than half the
- * downward one for the same reason: easy to recover, harder to lose.
- *
- * Travel is accumulated rather than acted on per event. A WebView emits a scroll callback per
- * frame of a fling, and a single pixel of jitter at the end of one would otherwise flip the bars
- * back and forth. A reversal resets the count, so the gesture that counts is the one in progress.
+ * An up-scroll counts only while the content can still scroll forward. At the very end, hiding
+ * the bars grows the viewport and the list clamps its own offset, which looks exactly like an
+ * up-scroll and used to bring the bars straight back — round and round.
  */
-@Stable
 internal class ChromeVisibility(
     private val nearTopPx: Int,
     private val hideAfterPx: Int,
-    private val showAfterPx: Int,
+    private val showAfterMs: Long,
+    private val now: () -> Long = { android.os.SystemClock.uptimeMillis() },
 ) {
     var visible by mutableStateOf(true)
         private set
 
-    private var travel = 0
+    private var downTravel = 0
+    private var upSince = 0L
+    private var lastUpAt = 0L
 
-    fun onScrolled(dy: Int, y: Int) {
+    fun onScrolled(dy: Int, y: Int, canScrollForward: Boolean = true) {
         if (y <= nearTopPx) {
-            travel = 0
+            downTravel = 0
+            upSince = 0L
             visible = true
             return
         }
-        travel = if (travel != 0 && (travel > 0) == (dy > 0)) travel + dy else dy
+        val t = now()
         when {
-            travel > hideAfterPx -> {
-                visible = false
-                travel = 0
+            dy > 0 -> {
+                upSince = 0L
+                downTravel += dy
+                if (downTravel > hideAfterPx) {
+                    visible = false
+                    downTravel = 0
+                }
             }
-            travel < -showAfterPx -> {
-                visible = true
-                travel = 0
+            dy < 0 -> {
+                if (!canScrollForward) return
+                downTravel = 0
+                // A pause breaks the run: "up for half a second" means a continuous gesture,
+                // not two nudges a minute apart.
+                if (upSince == 0L || t - lastUpAt > UP_RUN_GAP_MS) upSince = t
+                lastUpAt = t
+                if (t - upSince >= showAfterMs) {
+                    visible = true
+                    upSince = 0L
+                }
             }
         }
+    }
+
+    private companion object {
+        const val UP_RUN_GAP_MS = 250L
     }
 }
 
@@ -288,9 +303,39 @@ internal fun rememberChromeVisibility(): ChromeVisibility {
         with(density) {
             ChromeVisibility(
                 nearTopPx = 24.dp.roundToPx(),
-                hideAfterPx = 56.dp.roundToPx(),
-                showAfterPx = 20.dp.roundToPx(),
+                hideAfterPx = 40.dp.roundToPx(),
+                showAfterMs = 500L,
             )
+        }
+    }
+}
+
+/** Drive [chrome] from a lazy list. Row height stands in for pixel distance; see the callers. */
+@Composable
+internal fun ChromeScrollEffect(listState: LazyListState, chrome: ChromeVisibility, rowStepPx: Int) {
+    LaunchedEffect(listState, chrome) {
+        var last = 0
+        snapshotFlow {
+            Triple(
+                listState.firstVisibleItemIndex * rowStepPx + listState.firstVisibleItemScrollOffset,
+                listState.canScrollForward,
+                listState.canScrollBackward,
+            )
+        }.collect { (y, forward, _) ->
+            chrome.onScrolled(y - last, y, forward)
+            last = y
+        }
+    }
+}
+
+/** Drive [chrome] from a plain scroll state. */
+@Composable
+internal fun ChromeScrollEffect(scroll: ScrollState, chrome: ChromeVisibility) {
+    LaunchedEffect(scroll, chrome) {
+        var last = 0
+        snapshotFlow { scroll.value to scroll.canScrollForward }.collect { (y, forward) ->
+            chrome.onScrolled(y - last, y, forward)
+            last = y
         }
     }
 }
@@ -358,13 +403,7 @@ class NewsletterReaderScreen(
 
         // The plain-text fallback scrolls in Compose rather than in Chromium, so its deltas come
         // from the scroll state instead of a view listener. Same bars, same rules.
-        LaunchedEffect(scroll) {
-            var last = 0
-            snapshotFlow { scroll.value }.collect { y ->
-                chrome.onScrolled(y - last, y)
-                last = y
-            }
-        }
+        ChromeScrollEffect(scroll, chrome)
 
         WheelKeys()
         LightTheme(colors = colors) {
@@ -724,8 +763,10 @@ private fun LabelList(
                     .height(rowHeight.gridUnitsAsDp())
                     .lightClickable(onClickLabel = label.name, role = Role.Button) { onPick(label) }
                     .padding(
-                        horizontal = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
-                        vertical = LABEL_ROW_PADDING_UNITS.gridUnitsAsDp(),
+                        start = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
+                        end = ROW_END_MARGIN_UNITS.gridUnitsAsDp(),
+                        top = LABEL_ROW_PADDING_UNITS.gridUnitsAsDp(),
+                        bottom = LABEL_ROW_PADDING_UNITS.gridUnitsAsDp(),
                     ),
             ) {
                 LightText(

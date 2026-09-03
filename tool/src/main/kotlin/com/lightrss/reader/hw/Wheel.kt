@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.dp
 import com.thelightphone.sdk.LightHardwareKeys
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -73,25 +72,19 @@ private const val DIRECTION = 1
  * notch adds to a debt, and each frame pays off a share of it, so one notch glides and a fast
  * spin becomes a single continuous sweep that keeps moving slightly after your thumb stops.
  *
- * 0.28 settles ~90% inside seven frames: quick enough to feel direct, slow enough to read.
+ * 0.36 settles ~90% inside five frames (~85 ms): quick enough that the page moves with the thumb,
+ * slow enough that a spin still reads as one sweep. 0.28 was a touch behind the hand.
  */
-private const val SMOOTHING = 0.28f
+private const val SMOOTHING = 0.36f
 
 /**
- * Notches needed to start scrolling, and how long a turn stays live.
+ * How long a turn stays live, for the acceleration's sense of "the last notch".
  *
- * The wheel sits under a thumb and catches stray brushes, and one stray notch used to be a
- * scroll. So the first notch after a pause is held: a second notch inside [HOLD_MS] releases
- * both at once, and if none comes the held notch is released on its own when the hold runs
- * out — late by a tenth of a second, but not lost. The first release did lose it, and a wheel
- * that ignores a single deliberate click reads as a wheel that does not work. Once turning,
- * everything applies immediately until [IDLE_MS] passes with the wheel still, at which point the
- * hold comes back.
- *
- * 1.5 s is deliberately long. It has to cover deliberate-but-slow turning, and the cost of it
- * being too long is nil — you are turning the wheel, so the next notch re-arms it.
+ * There is no longer any guard on the first notch. The first release held it until a second
+ * arrived, which lost every deliberate single click; the next held it for 150 ms, which kept the
+ * click but made every first turn feel late. A stray brush of the wheel costs one paragraph of
+ * scroll, and that is cheaper than a wheel that hesitates.
  */
-private const val HOLD_MS = 150L
 private const val IDLE_MS = 1_500L
 
 /**
@@ -251,15 +244,17 @@ fun WheelScroll(
                     debt.edge = hitEdge
                     debt.edgeCount = 0
                     edge.edge = hitEdge
-                } else if (rowPx != null && state is LazyListState) {
-                    // Land on a row. Short and eased the same way as the glide, so it reads as
-                    // the end of the movement rather than a second one.
+                } else if (rowPx != null && state is LazyListState && state.canScrollForward && state.canScrollBackward) {
+                    // Land on a row. Not at either end: the last screenful of a list rarely
+                    // ends on a row boundary, and snapping there pulled the list back up
+                    // against the direction of travel — a jump the wrong way, right at the
+                    // bottom. Short and eased like the glide, so it reads as its end.
                     val offset = state.firstVisibleItemScrollOffset.toFloat()
                     var snap = if (offset > rowPx / 2f) rowPx - offset else -offset
                     var frames = 0
-                    while (abs(snap) > 0.5f && frames < 12) {
+                    while (abs(snap) > 0.5f && frames < 8) {
                         withFrameNanos { }
-                        val part = (snap * 0.35f).let { if (abs(it) < 1f) snap else it }
+                        val part = (snap * 0.5f).let { if (abs(it) < 1f) snap else it }
                         snap -= part
                         if (abs(scrollBy(part)) < abs(part) - 0.5f) break
                         frames++
@@ -302,12 +297,7 @@ fun WheelScroll(web: WebView?, active: Boolean = true) {
     }
 }
 
-/**
- * Notches, minus the stray ones, with the gap since the previous notch. See [HOLD_MS].
- *
- * Armed state lives in the effect rather than in composition state: it is a property of the turn
- * in progress, and a recomposition mid-turn should not disarm the wheel.
- */
+/** Notches as they arrive, with the gap since the previous one for the acceleration. */
 @Composable
 private fun ArmedNotches(active: Boolean, onNotch: (notches: Int, gapMs: Long) -> Unit) {
     val handler by rememberUpdatedState(onNotch)
@@ -315,32 +305,13 @@ private fun ArmedNotches(active: Boolean, onNotch: (notches: Int, gapMs: Long) -
         if (!active) return@LaunchedEffect
         val incoming = Channel<Int>(Channel.UNLIMITED)
         launch { Wheel.notches.collect { incoming.send(it) } }
-        var armed = false
         var last = 0L
-        fun now() = System.nanoTime() / 1_000_000
         while (true) {
-            val first = incoming.receive()
-            var t = now()
-            val gap = t - last
-            if (gap > IDLE_MS) armed = false
+            val notches = incoming.receive()
+            val t = System.nanoTime() / 1_000_000
+            val gap = if (last == 0L || t - last > IDLE_MS) IDLE_MS else t - last
             last = t
-            if (armed) {
-                handler(first, gap)
-                continue
-            }
-            // Hold the first notch of a turn for a beat. A second one releases both; silence
-            // releases the first on its own.
-            val second = withTimeoutOrNull(HOLD_MS) { incoming.receive() }
-            armed = true
-            if (second == null) {
-                handler(first, IDLE_MS)
-            } else {
-                t = now()
-                val secondGap = t - last
-                last = t
-                val both = first + second
-                if (both != 0) handler(both, secondGap) else handler(first.sign, secondGap)
-            }
+            handler(notches, gap)
         }
     }
 }

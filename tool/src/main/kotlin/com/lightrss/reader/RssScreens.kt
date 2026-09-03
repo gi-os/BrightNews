@@ -108,14 +108,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         // Same rules as the reader's bars: hide going forwards, back on any scroll up or near the
         // top. The list reports in item indices rather than pixels, so a row's height stands in
         // for the distance — close enough for a threshold, and it needs no measurement.
-        LaunchedEffect(listState, chrome) {
-            var last = 0
-            snapshotFlow { listState.firstVisibleItemIndex * ROW_STEP_PX + listState.firstVisibleItemScrollOffset }
-                .collect { y ->
-                    chrome.onScrolled(y - last, y)
-                    last = y
-                }
-        }
+        ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
 
         WheelKeys()
         LightTheme(colors = colors) {
@@ -274,7 +267,7 @@ private fun SectionTab(
  * distance would mean measuring rows. For deciding whether a scroll was a deliberate move, a
  * constant per row is enough — it only has to be the right order of magnitude.
  */
-private const val ROW_STEP_PX = 260
+internal const val ROW_STEP_PX = 260
 
 /**
  * The right reader for an article.
@@ -314,6 +307,9 @@ class FeedsScreen(
         val favoritesOnly by viewModel.favoritesOnly.collectAsState()
         val unreadOnly by viewModel.unreadOnly.collectAsState()
 
+        val chrome = rememberChromeVisibility()
+        val listState = rememberLazyListState()
+        ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
         LightTheme(colors = colors) {
             Column(
@@ -321,18 +317,20 @@ class FeedsScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                    center = LightTopBarCenter.Text("Subscriptions"),
-                    rightButton = LightBarButton.LightIcon(
-                        LightIcons.ADD,
-                        onClick = {
-                            navigateTo({ AddFeedChooserScreen(it, repository) }) { feedId ->
-                                navigateTo({ FeedScreen(it, feedId, repository) })
-                            }
-                        },
-                    ),
-                )
+                ReaderChrome(chrome.visible) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text("Subscriptions"),
+                        rightButton = LightBarButton.LightIcon(
+                            LightIcons.ADD,
+                            onClick = {
+                                navigateTo({ AddFeedChooserScreen(it, repository) }) { feedId ->
+                                    navigateTo({ FeedScreen(it, feedId, repository) })
+                                }
+                            },
+                        ),
+                    )
+                }
                 SettingsRow(
                     title = if (unreadOnly) "SHOWING UNREAD" else "SHOWING ALL",
                     detail = if (unreadOnly) {
@@ -355,25 +353,28 @@ class FeedsScreen(
                     feeds = feeds,
                     onOpen = { row -> navigateTo({ FeedScreen(it, row.feed.id, repository) }) },
                     modifier = Modifier.weight(1f),
+                    listState = listState,
                 )
-                LightBottomBar(
-                    items = listOf(
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.STAR_OUTLINE,
-                            onClick = { navigateTo({ SavedScreen(it, repository) }) },
-                            contentDescription = "Saved articles",
+                ReaderChrome(chrome.visible) {
+                    LightBottomBar(
+                        items = listOf(
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.STAR_OUTLINE,
+                                onClick = { navigateTo({ SavedScreen(it, repository) }) },
+                                contentDescription = "Saved articles",
+                            ),
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.DELETE,
+                                onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
+                                contentDescription = "Archive",
+                            ),
+                            LightBarButton.LightIcon(
+                                icon = LightIcons.SETTINGS,
+                                onClick = { navigateTo({ SettingsScreen(it, repository) }) },
+                            ),
                         ),
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.DELETE,
-                            onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
-                            contentDescription = "Archive",
-                        ),
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.SETTINGS,
-                            onClick = { navigateTo({ SettingsScreen(it, repository) }) },
-                        ),
-                    ),
-                )
+                    )
+                }
             }
         }
     }
@@ -583,6 +584,9 @@ class FeedScreen(
         val imageStore = rememberImageStore(repository)
         val isKagi = feed?.sourceType == Source.KAGI
 
+        val chrome = rememberChromeVisibility()
+        val listState = rememberLazyListState()
+        ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
         LightTheme(colors = colors) {
             Column(
@@ -590,11 +594,13 @@ class FeedScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                    center = LightTopBarCenter.Text(feed?.title ?: "Feed"),
-                    rightButton = LightBarButton.LightIcon(LightIcons.REFRESH, onClick = viewModel::refresh),
-                )
+                ReaderChrome(chrome.visible) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text(feed?.title ?: "Feed"),
+                        rightButton = LightBarButton.LightIcon(LightIcons.REFRESH, onClick = viewModel::refresh),
+                    )
+                }
                 StatusLine(
                     when {
                         state.isRefreshing -> "SYNC"
@@ -609,6 +615,7 @@ class FeedScreen(
                     emptyMessage = "No articles are available from this feed.",
                     onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
+                    listState = listState,
                     imageStore = imageStore,
                     // Kagi reads category by category; turning off the end of one is the
                     // same request as the NEXT button.
@@ -628,36 +635,38 @@ class FeedScreen(
                         }
                     },
                 )
-                LightBottomBar(
-                    items = if (isKagi) {
-                        // Favourites narrow the RSS home list; a Kagi category is read on its own.
-                        // NEXT turns the page to the following category, so a morning's reading
-                        // is one tap per category rather than a trip back to the list each time.
-                        listOf(
-                            LightBarButton.Text("READ ALL", onClick = viewModel::markAllRead),
-                            nextKagi?.let { next ->
-                                LightBarButton.Text("NEXT", onClick = {
-                                    navigateTo({ FeedScreen(it, next.id, repository) })
-                                })
-                            },
-                            unfollow,
-                        )
-                    } else {
-                        listOf(
-                            LightBarButton.Text("READ ALL", onClick = viewModel::markAllRead),
-                            LightBarButton.LightIcon(
-                                icon = if (feed?.isFavorite == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
-                                onClick = viewModel::toggleFavorite,
-                                contentDescription = if (feed?.isFavorite == true) {
-                                    "Hide from home"
-                                } else {
-                                    "Show on home"
+                ReaderChrome(chrome.visible) {
+                    LightBottomBar(
+                        items = if (isKagi) {
+                            // Favourites narrow the RSS home list; a Kagi category is read on its own.
+                            // NEXT turns the page to the following category, so a morning's reading
+                            // is one tap per category rather than a trip back to the list each time.
+                            listOf(
+                                LightBarButton.Text("READ ALL", onClick = viewModel::markAllRead),
+                                nextKagi?.let { next ->
+                                    LightBarButton.Text("NEXT", onClick = {
+                                        navigateTo({ FeedScreen(it, next.id, repository) })
+                                    })
                                 },
-                            ),
-                            unfollow,
-                        )
-                    },
-                )
+                                unfollow,
+                            )
+                        } else {
+                            listOf(
+                                LightBarButton.Text("READ ALL", onClick = viewModel::markAllRead),
+                                LightBarButton.LightIcon(
+                                    icon = if (feed?.isFavorite == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
+                                    onClick = viewModel::toggleFavorite,
+                                    contentDescription = if (feed?.isFavorite == true) {
+                                        "Hide from home"
+                                    } else {
+                                        "Show on home"
+                                    },
+                                ),
+                                unfollow,
+                            )
+                        },
+                    )
+                }
             }
         }
     }
@@ -718,6 +727,9 @@ class SavedScreen(
         val colors by LightThemeController.colors.collectAsState()
         val articles by viewModel.articles.collectAsState()
         val imageStore = rememberImageStore(repository)
+        val chrome = rememberChromeVisibility()
+        val listState = rememberLazyListState()
+        ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
         LightTheme(colors = colors) {
             Column(
@@ -725,15 +737,18 @@ class SavedScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                    center = LightTopBarCenter.Text("Saved"),
-                )
+                ReaderChrome(chrome.visible) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text("Saved"),
+                    )
+                }
                 ArticleList(
                     articles = articles,
                     emptyMessage = "No saved articles.\n\nUse the star while reading to keep something.",
                     onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
+                    listState = listState,
                     imageStore = imageStore,
                 )
             }
@@ -762,6 +777,9 @@ class ArchiveScreen(
         val colors by LightThemeController.colors.collectAsState()
         val articles by viewModel.articles.collectAsState()
         val imageStore = rememberImageStore(repository)
+        val chrome = rememberChromeVisibility()
+        val listState = rememberLazyListState()
+        ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
         LightTheme(colors = colors) {
             Column(
@@ -769,27 +787,32 @@ class ArchiveScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                    center = LightTopBarCenter.Text("Archive"),
-                )
+                ReaderChrome(chrome.visible) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text("Archive"),
+                    )
+                }
                 ArticleList(
                     articles = articles,
                     emptyMessage = "Nothing archived.\n\nArchiving hides an article from your " +
                         "lists and keeps it here.",
                     onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                     modifier = Modifier.weight(1f),
+                    listState = listState,
                     imageStore = imageStore,
                 )
                 if (articles.isNotEmpty()) {
-                    LightBottomBar(
-                        items = listOf(
-                            LightBarButton.Text(
-                                text = "RESTORE ALL",
-                                onClick = viewModel::restoreAll,
+                    ReaderChrome(chrome.visible) {
+                        LightBottomBar(
+                            items = listOf(
+                                LightBarButton.Text(
+                                    text = "RESTORE ALL",
+                                    onClick = viewModel::restoreAll,
+                                ),
                             ),
-                        ),
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -893,6 +916,8 @@ class ReaderScreen(
         // phone's greyscale for that would be a change with no visible cause.
         ColourEffect(colour && imageStore != null && article?.let { it.imageUrl.isNotBlank() || it.contentBlocks.isNotBlank() } == true)
 
+        val chrome = rememberChromeVisibility()
+        ChromeScrollEffect(scroll, chrome)
         WheelKeys()
         // Off the bottom and keep turning: the next article in this feed, here, in place. Off
         // the top: the previous one. Three notches past the end, so an overshoot does nothing.
@@ -903,19 +928,21 @@ class ReaderScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                    center = LightTopBarCenter.Text(row?.feedTitle ?: "Article"),
-                    rightButton = LightBarButton.LightIcon(
-                        icon = if (article?.isStarred == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
-                        onClick = viewModel::toggleStar,
-                        contentDescription = if (article?.isStarred == true) {
-                            "Remove from saved"
-                        } else {
-                            "Save article"
-                        },
-                    ),
-                )
+                ReaderChrome(chrome.visible) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text(row?.feedTitle ?: "Article"),
+                        rightButton = LightBarButton.LightIcon(
+                            icon = if (article?.isStarred == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
+                            onClick = viewModel::toggleStar,
+                            contentDescription = if (article?.isStarred == true) {
+                                "Remove from saved"
+                            } else {
+                                "Save article"
+                            },
+                        ),
+                    )
+                }
                 StatusLine(
                     when {
                         fetchingFullText -> "FETCHING THE WHOLE ARTICLE…"
@@ -1026,6 +1053,8 @@ class ReaderPageScreen(
 
         ColourEffect(colour && imageStore != null && page?.blocks?.isNotEmpty() == true)
 
+        val chrome = rememberChromeVisibility()
+        ChromeScrollEffect(scroll, chrome)
         WheelKeys()
         WheelScroll(scroll)
         LightTheme(colors = colors) {
@@ -1034,10 +1063,12 @@ class ReaderPageScreen(
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                LightTopBar(
-                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                    center = LightTopBarCenter.Text(sourceHost(link).ifBlank { "Article" }),
-                )
+                ReaderChrome(chrome.visible) {
+                    LightTopBar(
+                        leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                        center = LightTopBarCenter.Text(sourceHost(link).ifBlank { "Article" }),
+                    )
+                }
                 when {
                     state.isLoading -> LoadingScreen("Fetching the page\u2026", Modifier.weight(1f))
 
