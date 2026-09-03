@@ -101,7 +101,6 @@ fun BriefingContent(
                 MoreRow(
                     hidden = entries.size - TOP_N,
                     open = calendarOpen,
-                    noun = "MORE",
                     onClick = { onToggle(HomeViewModel.CALENDAR_SECTION) },
                 )
             }
@@ -132,7 +131,6 @@ fun BriefingContent(
                 MoreRow(
                     hidden = category.stories.size - TOP_N,
                     open = open,
-                    noun = "MORE STORIES",
                     onClick = { onToggle(category.feedId) },
                 )
             }
@@ -163,22 +161,24 @@ private fun SectionLabel(text: String, topUnits: Float, trailing: String? = null
 }
 
 /**
- * `SHOW 9 MORE STORIES` / `SHOW FEWER` under a section cut to its first three. Nothing when
- * the section was short enough to show whole.
+ * `More` / `Less` under a section cut to its first three: superfine, lightened, right-aligned,
+ * the weight of the `1H` at the end of a story row rather than a button. Nothing when the
+ * section was short enough to show whole.
  */
 @Composable
-private fun MoreRow(hidden: Int, open: Boolean, noun: String, onClick: () -> Unit) {
+private fun MoreRow(hidden: Int, open: Boolean, onClick: () -> Unit) {
     if (hidden <= 0) return
-    Column {
-        HairlineDivider()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .lightClickable(onClickLabel = if (open) "Show fewer" else "Show $hidden more", role = Role.Button) { onClick() }
+            .padding(top = 0.5f.gridUnitsAsDp(), bottom = 0.25f.gridUnitsAsDp()),
+        horizontalArrangement = Arrangement.End,
+    ) {
         LightText(
-            text = if (open) "SHOW FEWER" else "SHOW $hidden $noun",
-            variant = LightTextVariant.Fine,
+            text = if (open) "LESS" else "MORE",
+            variant = LightTextVariant.Superfine,
             lighten = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .lightClickable(onClickLabel = if (open) "Show fewer" else "Show $hidden more", role = Role.Button) { onClick() }
-                .padding(vertical = 0.75f.gridUnitsAsDp()),
         )
     }
 }

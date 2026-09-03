@@ -13,6 +13,9 @@ makes a dozen of them scannable.
 to a header with a count (`MONDAY · 14 ▸`); tap to open one. They fold back when you leave the
 app.
 
+**`MORE` is quieter.** The fold under a section is a small right-aligned `MORE` in the same
+weight as a story's age, not a button-sized `SHOW 9 MORE STORIES` row.
+
 **The briefing tab is a sun now**, not Kagi's newspaper. The tab is the day; Kagi is one of the
 things in it.
 
