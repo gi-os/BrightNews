@@ -102,7 +102,7 @@ internal fun stackedRowHeightGridUnits(
 }
 
 @Composable
-private fun articleRowHeightGridUnits(): Float = stackedRowHeightGridUnits(
+internal fun articleRowHeightGridUnits(): Float = stackedRowHeightGridUnits(
     titleLines = ARTICLE_TITLE_MAX_LINES,
     verticalPaddingUnits = ROW_VERTICAL_PADDING_UNITS,
     gapUnits = SOURCE_LINE_GAP_UNITS,
@@ -246,7 +246,7 @@ private fun sourceLine(row: ArticleRow): String {
 }
 
 @Composable
-private fun ArticleThumbnail(
+internal fun ArticleThumbnail(
     imageStore: ArticleImageStore,
     url: String,
     lighten: Boolean,

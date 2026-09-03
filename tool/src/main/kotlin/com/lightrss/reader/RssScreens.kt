@@ -22,6 +22,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.snapshotFlow
@@ -74,6 +77,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             RssDatabase.MIGRATION_2_3,
             RssDatabase.MIGRATION_3_4,
             RssDatabase.MIGRATION_4_5,
+            RssDatabase.MIGRATION_5_6,
         )
         val repository = RssRepository(
             dao = database.rssDao(),
@@ -86,29 +90,45 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val section by viewModel.section.collectAsState()
-        val articles by viewModel.articles.collectAsState()
         val unreadOnly by viewModel.unreadOnly.collectAsState()
         val favoritesOnly by viewModel.favoritesOnly.collectAsState()
         val favoriteCount by viewModel.favoriteFeedCount.collectAsState()
+        val feedCount by viewModel.feedCount.collectAsState()
         val labelCount by viewModel.labelCount.collectAsState()
-        val kagiFeeds by viewModel.kagiFeeds.collectAsState()
+        val edition by viewModel.edition.collectAsState()
+        val today by viewModel.today.collectAsState()
+        val todayTick by viewModel.todayTick.collectAsState()
+        val timeline by viewModel.timeline.collectAsState()
+        val timelineUnread by viewModel.timelineUnread.collectAsState()
         val sync by viewModel.syncState.collectAsState()
         val jumpToNewest by viewModel.jumpToNewest.collectAsState()
         val repository = viewModel.repository
         val imageStore = rememberImageStore(repository)
         val listState = rememberLazyListState()
+        val briefingScroll = rememberScrollState()
         val chrome = rememberChromeVisibility()
-        val newsletters = section == Source.GMAIL
-        val kagi = section == Source.KAGI
+        val briefing = section == HomeSection.BRIEFING
+        val context = LocalContext.current
 
-        LaunchedEffect(jumpToNewest) {
-            if (jumpToNewest > 0) listState.scrollToItem(0)
+        // Today comes from the notebook, read here because the provider needs a Context and
+        // the view model has none. Re-read on every show and every refresh: the calendar
+        // changes while you are in the other app.
+        LaunchedEffect(todayTick) {
+            val day = withContext(Dispatchers.IO) { runCatching { NotebookBridge.read(context) }.getOrNull() }
+            viewModel.setToday(day)
         }
 
-        // Same rules as the reader's bars: hide going forwards, back on any scroll up or near the
-        // top. The list reports in item indices rather than pixels, so a row's height stands in
-        // for the distance — close enough for a threshold, and it needs no measurement.
-        ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
+        LaunchedEffect(jumpToNewest, briefing) {
+            if (jumpToNewest > 0) {
+                if (briefing) briefingScroll.scrollTo(0) else listState.scrollToItem(0)
+            }
+        }
+
+        if (briefing) {
+            ChromeScrollEffect(briefingScroll, chrome)
+        } else {
+            ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
+        }
 
         WheelKeys()
         LightTheme(colors = colors) {
@@ -118,31 +138,20 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     .background(LightThemeTokens.colors.background),
             ) {
                 ReaderChrome(chrome.visible) {
-                    key(unreadOnly, favoritesOnly, newsletters, kagi) {
+                    key(briefing) {
                         LightTopBar(
                             leftButton = LightBarButton.LightIcon(
                                 icon = LightIcons.LIST,
                                 onClick = {
-                                    when {
-                                        newsletters -> navigateTo({ MailboxScreen(it, repository) })
-                                        kagi -> navigateTo({ KagiScreen(it, repository) })
-                                        else -> navigateTo({ FeedsScreen(it, repository) })
+                                    if (briefing) {
+                                        navigateTo({ KagiScreen(it, repository) })
+                                    } else {
+                                        navigateTo({ FeedsScreen(it, repository) })
                                     }
                                 },
-                                contentDescription = when {
-                                    newsletters -> "Mailbox"
-                                    kagi -> "Kagi categories"
-                                    else -> "Subscriptions"
-                                },
+                                contentDescription = if (briefing) "Kagi categories" else "Subscriptions",
                             ),
-                            center = LightTopBarCenter.Text(
-                                when {
-                                    newsletters -> "Newsletters"
-                                    kagi -> "Kagi News"
-                                    favoritesOnly -> "Favorites"
-                                    else -> "RSS"
-                                },
-                            ),
+                            center = LightTopBarCenter.Text(if (briefing) "Daily Briefing" else "Timeline"),
                             rightButton = LightBarButton.LightIcon(
                                 icon = LightIcons.SEARCH,
                                 onClick = { navigateTo({ SearchScreen(it, repository) }) },
@@ -155,31 +164,23 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     when {
                         sync.isRefreshing -> "SYNC ${sync.completedFeeds}/${sync.totalFeeds}"
                         sync.message?.contains("could not", ignoreCase = true) == true -> sync.message
+                        !briefing && timelineUnread > 0 -> "$timelineUnread UNREAD"
                         else -> null
                     },
                 )
-                if (kagi) {
-                    // Kagi is read a category at a time — a dozen stories, done — so the tab is
-                    // the list of categories, not their stories shuffled together.
-                    if (kagiFeeds.isEmpty()) {
-                        EmptyState(
-                            "No Kagi categories yet.\n\nOpen the list button to follow World, Tech, your city…",
-                            Modifier.weight(1f),
-                        )
-                    } else {
-                        FeedList(
-                            feeds = kagiFeeds,
-                            onOpen = { row -> navigateTo({ FeedScreen(it, row.feed.id, repository) }) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                if (briefing) {
+                    BriefingContent(
+                        today = today,
+                        edition = edition,
+                        onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
+                        scroll = briefingScroll,
+                        modifier = Modifier.weight(1f),
+                    )
                 } else {
-                    ArticleList(
-                        articles = articles,
-                        emptyMessage = emptyMessage(newsletters, unreadOnly, favoritesOnly, favoriteCount, labelCount),
-                        onOpen = { row ->
-                            navigateTo({ articleReader(it, row.article.id, repository) })
-                        },
+                    TimelineList(
+                        items = timeline,
+                        emptyMessage = emptyMessage(unreadOnly, favoritesOnly, favoriteCount, feedCount, labelCount),
+                        onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                         modifier = Modifier.weight(1f),
                         imageStore = imageStore,
                         listState = listState,
@@ -189,22 +190,16 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     LightBottomBar(
                         items = listOf(
                             SectionTab(
-                                iconRes = R.drawable.ic_rss_white,
-                                label = "RSS",
-                                selected = !newsletters && !kagi,
-                                onClick = { viewModel.showSection(Source.RSS) },
-                            ),
-                            SectionTab(
-                                iconRes = R.drawable.ic_newsletter_white,
-                                label = "Newsletters",
-                                selected = newsletters,
-                                onClick = { viewModel.showSection(Source.GMAIL) },
-                            ),
-                            SectionTab(
                                 iconRes = R.drawable.ic_kagi_white,
-                                label = "Kagi News",
-                                selected = kagi,
-                                onClick = { viewModel.showSection(Source.KAGI) },
+                                label = "Daily Briefing",
+                                selected = briefing,
+                                onClick = { viewModel.showSection(HomeSection.BRIEFING) },
+                            ),
+                            SectionTab(
+                                iconRes = R.drawable.ic_rss_white,
+                                label = "Timeline",
+                                selected = !briefing,
+                                onClick = { viewModel.showSection(HomeSection.TIMELINE) },
                             ),
                             LightBarButton.LightIcon(
                                 icon = LightIcons.REFRESH,
@@ -218,17 +213,14 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
     }
 
     private fun emptyMessage(
-        newsletters: Boolean,
         unreadOnly: Boolean,
         favoritesOnly: Boolean,
         favoriteCount: Int,
+        feedCount: Int,
         labelCount: Int,
     ): String = when {
-        newsletters && labelCount == 0 ->
-            "No newsletters yet.\n\nOpen the list button to connect Gmail and follow a label."
-        newsletters && unreadOnly ->
-            "Nothing unread.\n\nSwitch the filter to revisit past issues."
-        newsletters -> "No issues downloaded yet.\n\nRefresh from the mailbox."
+        feedCount == 0 && labelCount == 0 ->
+            "Nothing to read yet.\n\nOpen the list button to add a feed or connect Gmail."
         favoritesOnly && favoriteCount == 0 ->
             "No favorite feeds yet.\n\nStar a feed in Subscriptions, or switch back to all feeds."
         unreadOnly -> "You’re all caught up.\n\nSwitch the filter to see everything again."
@@ -237,7 +229,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
 }
 
 /**
- * One of the two sections, as a bottom-bar tab.
+ * One of the two tabs, in the bottom bar.
  *
  * The selected one is filled and the other is outlined — the panel has no accent colour to spend
  * on a selection, and dimming the inactive tab would read as disabled rather than unselected.
@@ -358,6 +350,13 @@ class FeedsScreen(
                 ReaderChrome(chrome.visible) {
                     LightBottomBar(
                         items = listOf(
+                            // The timeline is RSS and newsletters together, so its sources
+                            // screen has to reach both: the mailbox sits beside saved and archive.
+                            LightBarButton.Icon(
+                                painter = painterResource(R.drawable.ic_newsletter_white),
+                                onClick = { navigateTo({ MailboxScreen(it, repository) }) },
+                                contentDescription = "Mailbox",
+                            ),
                             LightBarButton.LightIcon(
                                 icon = LightIcons.STAR_OUTLINE,
                                 onClick = { navigateTo({ SavedScreen(it, repository) }) },
@@ -901,6 +900,7 @@ class ReaderScreen(
         val fetchingFullText by viewModel.fetchingFullText.collectAsState()
         val next by viewModel.next.collectAsState()
         val previous by viewModel.previous.collectAsState()
+        val position by viewModel.position.collectAsState()
         val turned by viewModel.turned.collectAsState()
         val article = row?.article
         val imageStore = rememberImageStore(repository)
@@ -931,7 +931,12 @@ class ReaderScreen(
                 ReaderChrome(chrome.visible) {
                     LightTopBar(
                         leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
-                        center = LightTopBarCenter.Text(row?.feedTitle ?: "Article"),
+                        center = LightTopBarCenter.Text(
+                            // A Kagi story says where it sits in its category: "World · 1 of 12".
+                            position?.let { (at, of) -> "${row?.feedTitle} · $at of $of" }
+                                ?: row?.feedTitle
+                                ?: "Article",
+                        ),
                         rightButton = LightBarButton.LightIcon(
                             icon = if (article?.isStarred == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
                             onClick = viewModel::toggleStar,
@@ -980,7 +985,11 @@ class ReaderScreen(
                             // and the date and nothing else.
                             LightText(
                                 text = listOfNotNull(
-                                    article.author.takeIf { it.isNotBlank() },
+                                    if (isKagi) {
+                                        article.sourceCount.takeIf { it > 0 }?.let { "$it SOURCES" }
+                                    } else {
+                                        article.author.takeIf { it.isNotBlank() }
+                                    },
                                     fullDate(article.publishedAt),
                                 ).joinToString(" · "),
                                 variant = LightTextVariant.Fine,

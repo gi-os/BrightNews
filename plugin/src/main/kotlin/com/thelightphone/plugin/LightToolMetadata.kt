@@ -21,6 +21,13 @@ data class LightToolMetadata(
     val versionName: String,
     val permissions: List<String>,
     val serverPackage: String,
+    /**
+     * Content-provider authorities this tool reads from other apps. Android 11's package
+     * visibility hides a provider from any app that has not declared it in `<queries>`, and a
+     * tool cannot write its own manifest, so the list rides in `lighttool.toml` as
+     * `queryProviders = ["com.example.other.data"]`.
+     */
+    val queryProviders: List<String> = emptyList(),
 ) {
     companion object {
         const val FILE_NAME: String = "lighttool.toml"
@@ -58,6 +65,7 @@ data class LightToolMetadata(
                 versionName = validateVersionName(tool.tomlString("versionName")),
                 permissions = validatePermissions(tool.tomlStringList("permissions")),
                 serverPackage = validateServerPackage(tool.tomlString("serverPackage")),
+                queryProviders = validateQueryProviders(tool.tomlStringList("queryProviders")),
             )
         }
 
@@ -102,6 +110,16 @@ data class LightToolMetadata(
                         "(e.g. com.lightos); got '$v'"
             }
             return v
+        }
+
+        private fun validateQueryProviders(values: List<String>?): List<String> {
+            val list = values ?: emptyList()
+            for (item in list) {
+                require(LightToolPolicy.TOOL_ID_PATTERN.matches(item)) {
+                    "tool.queryProviders entries must be lowercase dotted authorities; got '$item'"
+                }
+            }
+            return list.distinct()
         }
 
         private fun validatePermissions(values: List<String>?): List<String> {

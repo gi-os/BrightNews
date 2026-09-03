@@ -16,7 +16,16 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
-/** The two things a source of articles can be. Stored as text so a third is additive. */
+/**
+ * The two home tabs. Not sources: the briefing draws on Kagi and the notebook, the timeline
+ * on RSS and Gmail together. Stored as text in `app_metadata`.
+ */
+object HomeSection {
+    const val BRIEFING = "BRIEFING"
+    const val TIMELINE = "TIMELINE"
+}
+
+/** The three things a source of articles can be. Stored as text so a fourth is additive. */
 object Source {
     const val RSS = "RSS"
     const val GMAIL = "GMAIL"
@@ -96,6 +105,8 @@ data class ArticleEntity(
      * and left empty when the page turned out to be a paywall or a bot check.
      */
     val readerBlocks: String = "",
+    /** For a Kagi story, how many source articles it was drawn from; 0 for everything else. */
+    val sourceCount: Int = 0,
     val isRead: Boolean = false,
     val isStarred: Boolean = false,
     val isArchived: Boolean = false,
@@ -745,6 +756,56 @@ interface RssDao {
     )
     suspend fun previousInFeed(feedId: Long, id: String, publishedAt: Long, insertedAt: Long): ArticleEntity?
 
+    /* ------------------------------------------------------------------ briefing & timeline */
+
+    /**
+     * Today's Kagi edition, every followed category in reading order and every story in Kagi's
+     * ranking. Grouped by feed on the way to the screen.
+     */
+    @Query(
+        """
+        SELECT a.*, f.title AS feedTitle
+        FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE f.sourceType = 'KAGI' AND a.isArchived = 0
+        ORDER BY f.addedAt, f.id, a.publishedAt DESC, a.insertedAt DESC
+        """,
+    )
+    fun observeKagiEdition(): Flow<List<ArticleRow>>
+
+    /** Where a Kagi story sits in its category: how many rank above it, plus one. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM articles
+        WHERE feedId = :feedId AND isArchived = 0 AND publishedAt > :publishedAt
+        """,
+    )
+    suspend fun countRankedAbove(feedId: Long, publishedAt: Long): Int
+
+    @Query("SELECT COUNT(*) FROM articles WHERE feedId = :feedId AND isArchived = 0")
+    suspend fun countInFeed(feedId: Long): Int
+
+    /** The timeline: RSS and newsletters together, newest first. Kagi is the briefing's. */
+    @Query(
+        """
+        SELECT a.*, f.title AS feedTitle
+        FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE a.isArchived = 0
+          AND f.sourceType IN ('RSS', 'GMAIL')
+          AND (:unreadOnly = 0 OR a.isRead = 0)
+          AND (:favoritesOnly = 0 OR f.isFavorite = 1 OR f.sourceType = 'GMAIL')
+        ORDER BY a.publishedAt DESC, a.insertedAt DESC
+        """,
+    )
+    fun observeTimeline(unreadOnly: Boolean, favoritesOnly: Boolean): Flow<List<ArticleRow>>
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE a.isArchived = 0 AND a.isRead = 0 AND f.sourceType IN ('RSS', 'GMAIL')
+        """,
+    )
+    fun observeTimelineUnread(): Flow<Int>
+
     /* ------------------------------------------------------------------ Kagi */
 
     /**
@@ -873,7 +934,7 @@ interface RssDao {
         NewsletterBodyEntity::class,
         AppMetadataEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class RssDatabase : RoomDatabase() {
@@ -930,6 +991,16 @@ abstract class RssDatabase : RoomDatabase() {
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE articles ADD COLUMN readerBlocks TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /**
+         * The briefing shows how many sources a Kagi story was drawn from. Stories already
+         * stored read 0, which the screen shows as nothing; tomorrow's edition fills it in.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE articles ADD COLUMN sourceCount INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

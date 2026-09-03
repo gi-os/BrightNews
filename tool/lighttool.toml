@@ -3,8 +3,8 @@
 # orphan every subscription, saved article and read state already on the phone.
 id = "com.lightrss.reader"
 label = "News"
-versionCode = 32
-versionName = "2.11.0"
+versionCode = 33
+versionName = "3.0.0"
 permissions = [
     "android.permission.INTERNET",
     "android.permission.CAMERA",
@@ -14,6 +14,10 @@ permissions = [
     #   adb shell pm grant com.lightrss.reader android.permission.WRITE_SECURE_SETTINGS
     "android.permission.WRITE_SECURE_SETTINGS",
 ]
+# BrightNotebook serves today's page and weather to the Daily Briefing over this provider.
+# Android 11 hides a provider from any app that has not declared it, so this is load-bearing:
+# without it the briefing reads as a day with nothing on it.
+queryProviders = ["com.gios.lightnotebook.nextup"]
 # Real Light Phone III builds communicate with LightOS. Use
 # "com.thelightphone.sdk.emulator" temporarily for local emulator runs.
 serverPackage = "com.lightos"

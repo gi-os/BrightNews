@@ -172,19 +172,83 @@ fun LightLazyScrollView(
     uniformItemHeightGridUnits: Float,
     content: LazyListScope.() -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val itemHeightPx = with(density) { uniformItemHeightGridUnits.gridUnitsAsDp().toPx() }
+    LightLazyScrollViewCore(
+        modifier = modifier,
+        scrollBarPosition = scrollBarPosition,
+        listState = listState,
+        offsetOf = { index -> index * itemHeightPx },
+        totalOf = { count -> count * itemHeightPx },
+        indexAt = { px, count -> if (itemHeightPx <= 0f) 0 else (px / itemHeightPx).toInt().coerceIn(0, (count - 1).coerceAtLeast(0)) },
+        content = content,
+    )
+}
 
-    val scrollMetrics by remember {
+/**
+ * A lazy list whose rows are not all the same height — a list with section headers between
+ * its rows, say. [itemHeightGridUnits] answers for every index and must agree with what the
+ * rows actually measure, the same contract as the uniform version, only per item. Heights are
+ * prefix-summed once per [itemCount]/[heightsKey] change, so the bar's arithmetic stays O(1)
+ * per frame.
+ */
+@Composable
+fun LightLazyScrollView(
+    modifier: Modifier = Modifier,
+    scrollBarPosition: LightScrollBarPosition = LightScrollBarPosition.Outside,
+    listState: LazyListState = rememberLazyListState(),
+    itemCount: Int,
+    heightsKey: Any?,
+    itemHeightGridUnits: (index: Int) -> Float,
+    content: LazyListScope.() -> Unit,
+) {
+    val density = LocalDensity.current
+    val unitPx = with(density) { 1f.gridUnitsAsDp().toPx() }
+    val prefix = remember(itemCount, heightsKey, unitPx) {
+        val out = FloatArray(itemCount + 1)
+        for (index in 0 until itemCount) out[index + 1] = out[index] + itemHeightGridUnits(index) * unitPx
+        out
+    }
+    LightLazyScrollViewCore(
+        modifier = modifier,
+        scrollBarPosition = scrollBarPosition,
+        listState = listState,
+        offsetOf = { index -> prefix[index.coerceIn(0, prefix.size - 1)] },
+        totalOf = { count -> prefix[count.coerceIn(0, prefix.size - 1)] },
+        indexAt = { px, count ->
+            var lo = 0
+            var hi = (count - 1).coerceAtLeast(0).coerceAtMost(prefix.size - 2)
+            while (lo < hi) {
+                val mid = (lo + hi + 1) / 2
+                if (prefix[mid] <= px) lo = mid else hi = mid - 1
+            }
+            lo
+        },
+        content = content,
+    )
+}
+
+@Composable
+private fun LightLazyScrollViewCore(
+    modifier: Modifier,
+    scrollBarPosition: LightScrollBarPosition,
+    listState: LazyListState,
+    offsetOf: (index: Int) -> Float,
+    totalOf: (count: Int) -> Float,
+    indexAt: (px: Float, count: Int) -> Int,
+    content: LazyListScope.() -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+
+    val scrollMetrics by remember(offsetOf, totalOf) {
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
             val itemCount = layoutInfo.totalItemsCount
             val viewportHeightPx = layoutInfo.viewportSize.height.toFloat()
-            val totalContentPx = itemCount * itemHeightPx
+            val totalContentPx = totalOf(itemCount)
             val maxScrollPx = (totalContentPx - viewportHeightPx).coerceAtLeast(0f)
             val scrollPx = (
-                listState.firstVisibleItemIndex * itemHeightPx +
+                offsetOf(listState.firstVisibleItemIndex) +
                     listState.firstVisibleItemScrollOffset
                 ).coerceAtMost(maxScrollPx)
             scrollPx to maxScrollPx
@@ -196,12 +260,11 @@ fun LightLazyScrollView(
     val barAlpha = rememberScrollBarAlpha(scrollPx)
 
     fun scrollToOffsetPx(targetPx: Float) {
-        if (itemHeightPx <= 0f) return
         val itemCount = listState.layoutInfo.totalItemsCount
         if (itemCount == 0) return
         val clamped = targetPx.coerceIn(0f, maxScrollPx)
-        val index = (clamped / itemHeightPx).toInt().coerceIn(0, itemCount - 1)
-        val offset = (clamped - index * itemHeightPx).roundToInt()
+        val index = indexAt(clamped, itemCount)
+        val offset = (clamped - offsetOf(index)).roundToInt().coerceAtLeast(0)
         scope.launch { listState.scrollToItem(index, offset) }
     }
 

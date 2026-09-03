@@ -326,6 +326,28 @@ class RssRepository(
     fun observeFeeds(source: String? = null): Flow<List<FeedRow>> = dao.observeFeeds(source)
     fun observeKagiFeeds(): Flow<List<FeedRow>> = dao.observeKagiFeeds()
 
+    fun observeKagiEdition(): Flow<List<ArticleRow>> = dao.observeKagiEdition()
+    fun observeTimeline(unreadOnly: Boolean, favoritesOnly: Boolean): Flow<List<ArticleRow>> =
+        dao.observeTimeline(unreadOnly, favoritesOnly)
+    fun observeTimelineUnread(): Flow<Int> = dao.observeTimelineUnread().distinctUntilChanged()
+
+    /** "1 of 12": a Kagi story's place in its category, or null for anything else. */
+    suspend fun kagiPosition(article: ArticleEntity): Pair<Int, Int>? {
+        if (!article.guid.startsWith("kagi:")) return null
+        val above = dao.countRankedAbove(article.feedId, article.publishedAt)
+        val total = dao.countInFeed(article.feedId)
+        return (above + 1) to total
+    }
+
+    /** Which home tab was open last; the briefing until the reader says otherwise. */
+    val homeSection: Flow<String> = dao.observeMetadata(HOME_SECTION_KEY)
+        .map { it ?: HomeSection.BRIEFING }
+        .distinctUntilChanged()
+
+    suspend fun setHomeSection(section: String) {
+        dao.putMetadata(AppMetadataEntity(HOME_SECTION_KEY, section))
+    }
+
     /** The article after [article] in its feed, in list order; null at the end. */
     suspend fun nextInFeed(article: ArticleEntity): ArticleEntity? =
         dao.nextInFeed(article.feedId, article.id, article.publishedAt, article.insertedAt)
@@ -588,6 +610,7 @@ class RssRepository(
                 publishedAt = Kagi.storyPublishedAt(edition, cluster),
                 summary = Kagi.stripCitations(cluster.summary).take(MAX_SUMMARY_LENGTH),
                 imageUrl = cluster.imageUrl.take(MAX_URL_LENGTH),
+                sourceCount = maxOf(cluster.sourceCount, cluster.sources.size),
                 contentBlocks = ContentBlocks.encode(Kagi.blocks(cluster)).let { encoded ->
                     if (encoded.length <= MAX_CONTENT_LENGTH) encoded else encoded.take(MAX_CONTENT_LENGTH).substringBeforeLast('\n', "")
                 },
@@ -786,6 +809,7 @@ class RssRepository(
         private const val STARTER_FEEDS_KEY = "starter_feeds_added"
         private const val SHOW_IMAGES_KEY = "show_images"
         private const val FULL_TEXT_KEY = "full_text"
+        private const val HOME_SECTION_KEY = "home_section"
         private const val KAGI_INDEX_KEY = "kagi_index"
         private const val KAGI_INDEX_AT_KEY = "kagi_index_at"
         private const val KAGI_INDEX_AGE_MS = 24 * 60 * 60 * 1_000L

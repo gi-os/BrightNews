@@ -4,6 +4,25 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.0.0 - 2026-09-03
+
+### Changed
+
+- Home is two tabs, `HomeSection.BRIEFING` (default, persisted in `app_metadata`) and
+  `HomeSection.TIMELINE`, replacing the RSS / Newsletters / Kagi tabs. `Briefing.kt` holds the
+  pure shapes: `edition()` groups Kagi rows by feed, `timeline()` interleaves bucket headers on
+  a 04:00 journal day, `sourceLine()`, `weatherLine()`, `entryTime()`. `BriefingUi.kt` renders
+  both; `BriefingContent` is a plain scroll view, `TimelineList` a lazy list with two row
+  heights.
+- `sdk/ui` `LightLazyScrollView` gains an overload taking `itemCount`, `heightsKey` and a
+  per-index `itemHeightGridUnits`, prefix-summed for the scroll bar; the uniform version is a
+  wrapper over the same core.
+- `NotebookBridge` reads `content://com.gios.lightnotebook.nextup/day` and `/weather`
+  (BrightNotebook ≥ 1.61). The plugin gains `queryProviders` in `lighttool.toml`, emitted as
+  `<provider android:authorities>` inside `<queries>`.
+- `ArticleEntity.sourceCount` (schema 5 → 6) for Kagi stories; the reader's bar shows
+  `Category · n of m` via `RssRepository.kagiPosition`. `FeedsScreen` gains a Mailbox button.
+
 ## 2.11.0 - 2026-09-03
 
 ### Fixed

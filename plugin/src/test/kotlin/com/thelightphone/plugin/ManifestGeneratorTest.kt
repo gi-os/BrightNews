@@ -10,6 +10,7 @@ class ManifestGeneratorTest {
         label: String = "My App",
         permissions: List<String> = emptyList(),
         serverPackage: String = "com.lightos",
+        queryProviders: List<String> = emptyList(),
     ): String = ManifestGenerator.render(
         LightToolMetadata(
             toolId = "com.example.mytool",
@@ -18,8 +19,16 @@ class ManifestGeneratorTest {
             versionName = "1.0.0",
             permissions = permissions,
             serverPackage = serverPackage,
+            queryProviders = queryProviders,
         )
     )
+
+    @Test
+    fun `a queried provider lands inside the queries element`() {
+        val xml = render(queryProviders = listOf("com.gios.lightnotebook.nextup"))
+        val queries = xml.substringAfter("<queries>").substringBefore("</queries>")
+        assertTrue(queries.contains("""<provider android:authorities="com.gios.lightnotebook.nextup" />"""))
+    }
 
     @Test
     fun `empty permissions produces no uses-permission elements`() {

@@ -77,6 +77,9 @@ object ManifestGenerator {
         appendLine("""        <intent>""")
         appendLine("""            <action android:name="com.thelightphone.sdk.ACTION_SDK_MARKER" />""")
         appendLine("""        </intent>""")
+        for (authority in metadata.queryProviders) {
+            appendLine("""        <provider android:authorities="${xmlAttr(authority)}" />""")
+        }
         appendLine("""    </queries>""")
         appendLine("""</manifest>""")
     }

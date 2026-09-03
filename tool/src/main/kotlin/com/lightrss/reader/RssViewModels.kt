@@ -21,13 +21,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The two sections, and the counts beside them.
+ * Home: the briefing and the timeline.
  *
- * Home is a chooser rather than a list because the two sources read differently — an RSS item is
- * a headline you skim past, a newsletter is a thing you sat down for — and merging them into one
- * timeline buries the second under the first on any day with a busy feed. The counts are what
- * make the extra tap worth it: you can see whether there is anything in either without opening
- * one.
+ * Two tabs rather than one list because the two read differently. The briefing is a page you
+ * sit down with once — today, then Kagi's dozen stories per category — and the timeline is the
+ * stream you skim between times: RSS and newsletters, newest first, in one place. Merging them
+ * would bury the page under the stream on any day with a busy feed.
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HomeViewModel(
@@ -35,17 +34,13 @@ class HomeViewModel(
     private val database: RssDatabase,
 ) : LightViewModel<Unit>() {
 
-    /**
-     * Which section the list is showing. Not persisted on purpose: the app opens on RSS because
-     * that is the one with something new in it most days, and a remembered tab means opening to
-     * whatever you happened to be looking at last week.
-     */
-    private val _section = MutableStateFlow(Source.RSS)
-    val section: StateFlow<String> = _section.asStateFlow()
+    /** Which tab is showing. Persisted: the app opens where it was left, the briefing to begin with. */
+    val section: StateFlow<String> = repository.homeSection
+        .stateIn(viewModelScope, SharingStarted.Eagerly, HomeSection.BRIEFING)
 
-    fun showSection(source: String) {
-        if (_section.value == source) return
-        _section.value = source
+    fun showSection(next: String) {
+        if (section.value == next) return
+        viewModelScope.launch(Dispatchers.IO) { repository.setHomeSection(next) }
         _jumpToNewest.update { it + 1 }
     }
 
@@ -57,13 +52,35 @@ class HomeViewModel(
     val favoriteFeedCount: StateFlow<Int> = repository.observeFavoriteFeedCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
-    val articles: StateFlow<List<ArticleRow>> =
-        combine(_section, unreadOnly, favoritesOnly) { section, unread, favourites ->
-            // Favourites are an RSS idea; a mailbox has no starred labels to narrow to.
-            Triple(section, unread, favourites && section == Source.RSS)
-        }.flatMapLatest { (section, unread, favourites) ->
-            repository.observeInbox(unread, favourites, section)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /* ------------------------------------------------------------------ briefing */
+
+    /** Kagi's edition, a category at a time, in the order the categories were followed. */
+    val edition: StateFlow<List<Briefing.CategoryStories>> = repository.observeKagiEdition()
+        .map { Briefing.edition(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Today from the notebook. Read by the screen — the provider needs a Context, which a
+     * view model does not have — and handed here so it survives the tab switch.
+     */
+    private val _today = MutableStateFlow<NotebookDay?>(null)
+    val today: StateFlow<NotebookDay?> = _today.asStateFlow()
+    fun setToday(day: NotebookDay?) { _today.value = day }
+
+    /** Bumped when the notebook should be read again: a refresh, or coming back to the app. */
+    private val _todayTick = MutableStateFlow(0)
+    val todayTick: StateFlow<Int> = _todayTick.asStateFlow()
+
+    /* ------------------------------------------------------------------ timeline */
+
+    val timeline: StateFlow<List<Briefing.TimelineItem>> =
+        combine(unreadOnly, favoritesOnly) { unread, favourites -> unread to favourites }
+            .flatMapLatest { (unread, favourites) -> repository.observeTimeline(unread, favourites) }
+            .map { rows -> Briefing.timeline(rows, System.currentTimeMillis(), java.time.ZoneId.systemDefault()) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val timelineUnread: StateFlow<Int> = repository.observeTimelineUnread()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     /**
      * Bumped when the list should go back to the newest item: on first show, after the app has
@@ -79,18 +96,15 @@ class HomeViewModel(
         jumpPending = true
     }
 
-    val rssUnread: StateFlow<Int> = repository.observeUnreadCount(Source.RSS)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-    val newsletterUnread: StateFlow<Int> = repository.observeUnreadCount(Source.GMAIL)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     val feedCount: StateFlow<Int> = repository.observeFeeds(Source.RSS)
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     val labelCount: StateFlow<Int> = repository.observeFeeds(Source.GMAIL)
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-    val kagiFeeds: StateFlow<List<FeedRow>> = repository.observeKagiFeeds()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val kagiCount: StateFlow<Int> = repository.observeFeeds(Source.KAGI)
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     val syncState: StateFlow<SyncState> = repository.syncState
 
     private var initialized = false
@@ -109,12 +123,14 @@ class HomeViewModel(
             jumpPending = false
             _jumpToNewest.update { it + 1 }
         }
+        _todayTick.update { it + 1 }
         if (initialized) {
             viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = false) }
         }
     }
 
     fun refresh() {
+        _todayTick.update { it + 1 }
         viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = true) }
     }
 
@@ -387,6 +403,10 @@ class ReaderViewModel(
     private val _turned = MutableStateFlow(0)
     val turned: StateFlow<Int> = _turned.asStateFlow()
 
+    /** "1 of 12" for a Kagi story; null for anything else. */
+    private val _position = MutableStateFlow<Pair<Int, Int>?>(null)
+    val position: StateFlow<Pair<Int, Int>?> = _position.asStateFlow()
+
     /** The articles either side of this one in its feed, for the edge hint and the turn. */
     private val _next = MutableStateFlow<ArticleEntity?>(null)
     val next: StateFlow<ArticleEntity?> = _next.asStateFlow()
@@ -404,6 +424,7 @@ class ReaderViewModel(
                 val row = article.first { it?.article?.id == id } ?: return@collect
                 _next.value = repository.nextInFeed(row.article)
                 _previous.value = repository.previousInFeed(row.article)
+                _position.value = repository.kagiPosition(row.article)
                 fetchFullText(row.article)
             }
         }
