@@ -42,6 +42,12 @@ sealed interface FeedLoadResult {
     data object NotModified : FeedLoadResult
 }
 
+/** A plain text or JSON document fetched conditionally. */
+sealed interface TextLoadResult {
+    data class Loaded(val body: String, val etag: String?, val lastModified: String?) : TextLoadResult
+    data object NotModified : TextLoadResult
+}
+
 data class SyncState(
     val isRefreshing: Boolean = false,
     val completedFeeds: Int = 0,
@@ -91,6 +97,26 @@ class RssApi {
             feedUrl = effectiveFeedUrl,
             etag = feedResponse.headers[HttpHeaders.ETag],
             lastModified = feedResponse.headers[HttpHeaders.LastModified],
+        )
+    }
+
+    /**
+     * Fetches a text document — Kagi's JSON — with the same conditional headers a feed gets.
+     * No feed discovery, no HTML sniffing: the caller knows exactly what it asked for.
+     */
+    suspend fun loadText(url: String, etag: String? = null, lastModified: String? = null): TextLoadResult {
+        val response = client.get(url) {
+            header(HttpHeaders.UserAgent, USER_AGENT)
+            header(HttpHeaders.Accept, "application/json, text/plain;q=0.9, */*;q=0.5")
+            if (!etag.isNullOrBlank()) header(HttpHeaders.IfNoneMatch, etag)
+            if (!lastModified.isNullOrBlank()) header(HttpHeaders.IfModifiedSince, lastModified)
+        }
+        if (response.status == HttpStatusCode.NotModified) return TextLoadResult.NotModified
+        ensureSuccess(response)
+        return TextLoadResult.Loaded(
+            body = response.bodyAsText(),
+            etag = response.headers[HttpHeaders.ETag],
+            lastModified = response.headers[HttpHeaders.LastModified],
         )
     }
 
@@ -298,6 +324,7 @@ class RssRepository(
     fun observeStarred(): Flow<List<ArticleRow>> = dao.observeStarred()
     fun observeArchived(): Flow<List<ArticleRow>> = dao.observeArchived()
     fun observeFeeds(source: String? = null): Flow<List<FeedRow>> = dao.observeFeeds(source)
+    fun observeKagiFeeds(): Flow<List<FeedRow>> = dao.observeKagiFeeds()
     fun observeFeed(feedId: Long): Flow<FeedEntity?> = dao.observeFeed(feedId)
     fun observeFeedArticles(feedId: Long): Flow<List<ArticleRow>> = dao.observeFeedArticles(feedId)
     fun observeArticle(articleId: String): Flow<ArticleRow?> = dao.observeArticle(articleId)
@@ -407,6 +434,160 @@ class RssRepository(
         return result
     }
 
+    /* ------------------------------------------------------------------ full text */
+
+    /** Whether the reader fetches the whole article behind a feed's summary. On by default. */
+    val fullTextEnabled: Flow<Boolean> = dao.observeMetadata(FULL_TEXT_KEY)
+        .map { it != "0" }
+        .distinctUntilChanged()
+
+    suspend fun setFullTextEnabled(enabled: Boolean) {
+        dao.putMetadata(AppMetadataEntity(FULL_TEXT_KEY, if (enabled) "1" else "0"))
+    }
+
+    /**
+     * Fetches the whole article behind [article]'s link and stores it on the row, so the reader
+     * shows the story where the feed's paragraph was — now, and offline later.
+     *
+     * Returns true when something readable was stored. A paywall, a bot check or a page with no
+     * body copy stores [FULL_TEXT_UNAVAILABLE] instead, so the next refresh does not try the same
+     * dead page again; the reader's OPEN row still tries on demand. Only RSS articles qualify —
+     * a newsletter is already whole, and a Kagi story links to forty sources, not one page.
+     */
+    suspend fun fetchFullText(article: ArticleEntity, force: Boolean = false): Boolean {
+        if (article.link.isBlank()) return false
+        if (!force && article.readerBlocks.isNotEmpty()) return article.readerBlocks != FULL_TEXT_UNAVAILABLE
+        if (NewsletterSync.isNewsletter(article.id)) return false
+        val result = runCatching { readerPage(article.id, article.link, refresh = force) }.getOrNull()
+        val readable = result != null && with(ReaderExtractor) { result.page.hasContent() } && !result.gated
+        if (!readable) {
+            if (article.readerBlocks.isEmpty()) dao.setReaderBlocks(article.id, FULL_TEXT_UNAVAILABLE)
+            return false
+        }
+        val encoded = ContentBlocks.encode(result!!.page.blocks).let { encoded ->
+            if (encoded.length <= MAX_CONTENT_LENGTH) encoded else encoded.take(MAX_CONTENT_LENGTH).substringBeforeLast('\n', "")
+        }
+        if (encoded.isBlank()) return false
+        dao.setReaderBlocks(article.id, encoded)
+        return true
+    }
+
+    /**
+     * Full text for the newest unread articles, ahead of anyone opening them. Bounded, and run
+     * after the feeds themselves so a slow publisher never holds up the sync count.
+     */
+    private suspend fun prefetchFullText() {
+        if (dao.getMetadata(FULL_TEXT_KEY) == "0") return
+        val pending = dao.articlesAwaitingFullText(FULL_TEXT_PREFETCH_LIMIT)
+        for (article in pending) {
+            runCatching { fetchFullText(article) }
+        }
+    }
+
+    /* ------------------------------------------------------------------ Kagi */
+
+    /**
+     * Kagi's category index, fetched at most once a day. Categories are added and removed rarely,
+     * and the picker is the only reader of this, so a day-old list is as good as a fresh one.
+     */
+    suspend fun kagiCategories(force: Boolean = false): List<Kagi.Category> {
+        val cachedAt = dao.getMetadata(KAGI_INDEX_AT_KEY)?.toLongOrNull() ?: 0L
+        val cached = dao.getMetadata(KAGI_INDEX_KEY)
+        if (!force && cached != null && System.currentTimeMillis() - cachedAt < KAGI_INDEX_AGE_MS) {
+            runCatching { Kagi.parseIndex(cached) }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return it }
+        }
+        val loaded = try {
+            api.loadText(Kagi.INDEX_URL) as TextLoadResult.Loaded
+        } catch (error: Throwable) {
+            // Offline: the stale copy beats an empty picker.
+            cached?.let { runCatching { Kagi.parseIndex(it) }.getOrNull() }?.takeIf { it.isNotEmpty() }?.let { return it }
+            throw error
+        }
+        val categories = Kagi.parseIndex(loaded.body)
+        if (categories.isEmpty()) throw IllegalStateException("Kagi News returned no categories.")
+        dao.putMetadata(AppMetadataEntity(KAGI_INDEX_KEY, loaded.body))
+        dao.putMetadata(AppMetadataEntity(KAGI_INDEX_AT_KEY, System.currentTimeMillis().toString()))
+        return categories
+    }
+
+    /** The Kagi categories already followed, by category file url. */
+    suspend fun followedKagiUrls(): Set<String> = dao.getKagiFeeds().map { it.url }.toSet()
+
+    /** Follows a Kagi category and fetches today's edition. Returns the new feed's id. */
+    suspend fun addKagiCategory(category: Kagi.Category): Long {
+        dao.getFeedByUrl(category.url)?.let { return it.id }
+        val feedId = dao.insertFeed(
+            FeedEntity(
+                title = category.name,
+                url = category.url,
+                siteUrl = Kagi.BASE_URL,
+                description = "Kagi News",
+                sourceType = Source.KAGI,
+            ),
+        )
+        val feed = dao.getFeed(feedId) ?: return feedId
+        syncMutex.withLock { refreshFeedInternal(feed) }.getOrThrow()
+        return feedId
+    }
+
+    /** The Kagi category after [feedId] in reading order, wrapping round; null when it is alone. */
+    suspend fun nextKagiFeed(feedId: Long): FeedEntity? {
+        val feeds = dao.getKagiFeeds()
+        if (feeds.size < 2) return null
+        val index = feeds.indexOfFirst { it.id == feedId }
+        if (index < 0) return null
+        return feeds[(index + 1) % feeds.size]
+    }
+
+    private suspend fun refreshKagi(feed: FeedEntity) {
+        when (val result = api.loadText(feed.url, feed.etag, feed.lastModified)) {
+            TextLoadResult.NotModified -> dao.markFeedNotModified(feed.id, System.currentTimeMillis())
+            is TextLoadResult.Loaded -> {
+                val edition = Kagi.parseEdition(result.body)
+                dao.updateFeedAfterRefresh(
+                    feedId = feed.id,
+                    title = feed.title,
+                    siteUrl = Kagi.BASE_URL,
+                    description = "Kagi News",
+                    fetchedAt = System.currentTimeMillis(),
+                    etag = result.etag,
+                    lastModified = result.lastModified,
+                )
+                val since = edition.publishedAt - KAGI_DUPLICATE_WINDOW_MS
+                val upserts = edition.clusters
+                    .distinctBy { Kagi.storyGuid(it.title) }
+                    .filter { cluster ->
+                        dao.kagiStoryHeldElsewhere(feed.id, Kagi.storyGuid(cluster.title), since) == 0
+                    }
+                    .map { cluster -> kagiUpsert(feed.id, edition, cluster) }
+                dao.storeArticles(upserts)
+                dao.trimKagi(feed.id, before = System.currentTimeMillis() - KAGI_KEEP_MS)
+            }
+        }
+    }
+
+    private fun kagiUpsert(feedId: Long, edition: Kagi.Edition, cluster: Kagi.Cluster): ArticleUpsert {
+        val guid = Kagi.storyGuid(cluster.title)
+        val topStory = cluster.sources.firstOrNull()?.link.orEmpty()
+        return ArticleUpsert(
+            article = ArticleEntity(
+                id = RssParser.stableArticleId(feedId, guid, topStory, cluster.title),
+                feedId = feedId,
+                guid = guid,
+                title = cluster.title.take(MAX_TITLE_LENGTH),
+                link = topStory.take(MAX_URL_LENGTH),
+                author = listOf(cluster.topic, cluster.location).filter { it.isNotBlank() }.joinToString(" · ").take(MAX_AUTHOR_LENGTH),
+                publishedAt = Kagi.storyPublishedAt(edition, cluster),
+                summary = Kagi.stripCitations(cluster.summary).take(MAX_SUMMARY_LENGTH),
+                imageUrl = cluster.imageUrl.take(MAX_URL_LENGTH),
+                contentBlocks = ContentBlocks.encode(Kagi.blocks(cluster)).let { encoded ->
+                    if (encoded.length <= MAX_CONTENT_LENGTH) encoded else encoded.take(MAX_CONTENT_LENGTH).substringBeforeLast('\n', "")
+                },
+            ),
+            hasDate = true,
+        )
+    }
+
     suspend fun initialize() {
         // One-time data migration, before any refresh can write rows under the old scheme:
         // ids used to hash the fetch's effective URL, and this re-keys every RSS article onto
@@ -464,6 +645,7 @@ class RssRepository(
                     totalFeeds = feeds.size,
                 )
             }
+            runCatching { prefetchFullText() }
             _syncState.value = SyncState(
                 isRefreshing = false,
                 completedFeeds = feeds.size,
@@ -536,6 +718,10 @@ class RssRepository(
             dao.markFeedNotModified(feed.id, System.currentTimeMillis())
             return@runCatching
         }
+        if (feed.sourceType == Source.KAGI) {
+            refreshKagi(feed)
+            return@runCatching
+        }
         when (val result = api.load(feed.url, feed.etag, feed.lastModified)) {
             FeedLoadResult.NotModified -> dao.markFeedNotModified(feed.id, System.currentTimeMillis())
             is FeedLoadResult.Loaded -> {
@@ -591,6 +777,22 @@ class RssRepository(
         private const val AGENT_KEY = "site_agent:"
         private const val STARTER_FEEDS_KEY = "starter_feeds_added"
         private const val SHOW_IMAGES_KEY = "show_images"
+        private const val FULL_TEXT_KEY = "full_text"
+        private const val KAGI_INDEX_KEY = "kagi_index"
+        private const val KAGI_INDEX_AT_KEY = "kagi_index_at"
+        private const val KAGI_INDEX_AGE_MS = 24 * 60 * 60 * 1_000L
+        /** A story seen in another category this recently is the same story, not a new one. */
+        private const val KAGI_DUPLICATE_WINDOW_MS = 36 * 60 * 60 * 1_000L
+        /** A week of editions per category; saved and archived stories are exempt from the trim. */
+        private const val KAGI_KEEP_MS = 7 * 24 * 60 * 60 * 1_000L
+        /** Articles fetched in full per refresh, newest unread first. */
+        private const val FULL_TEXT_PREFETCH_LIMIT = 12
+
+        /**
+         * Stored in [ArticleEntity.readerBlocks] when the page could not be read — decodes to
+         * no blocks, so the reader falls back to the feed's own text.
+         */
+        const val FULL_TEXT_UNAVAILABLE = "-"
         private const val COLOUR_KEY = "lift_greyscale"
         private const val HOME_FAVORITES_KEY = "home_favorites_only"
         private const val HOME_UNREAD_KEY = "home_unread_only"

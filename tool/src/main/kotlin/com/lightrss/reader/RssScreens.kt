@@ -69,6 +69,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             RssDatabase.MIGRATION_1_2,
             RssDatabase.MIGRATION_2_3,
             RssDatabase.MIGRATION_3_4,
+            RssDatabase.MIGRATION_4_5,
         )
         val repository = RssRepository(
             dao = database.rssDao(),
@@ -86,6 +87,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         val favoritesOnly by viewModel.favoritesOnly.collectAsState()
         val favoriteCount by viewModel.favoriteFeedCount.collectAsState()
         val labelCount by viewModel.labelCount.collectAsState()
+        val kagiFeeds by viewModel.kagiFeeds.collectAsState()
         val sync by viewModel.syncState.collectAsState()
         val jumpToNewest by viewModel.jumpToNewest.collectAsState()
         val repository = viewModel.repository
@@ -93,6 +95,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         val listState = rememberLazyListState()
         val chrome = rememberChromeVisibility()
         val newsletters = section == Source.GMAIL
+        val kagi = section == Source.KAGI
 
         LaunchedEffect(jumpToNewest) {
             if (jumpToNewest > 0) listState.scrollToItem(0)
@@ -118,22 +121,27 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     .background(LightThemeTokens.colors.background),
             ) {
                 ReaderChrome(chrome.visible) {
-                    key(unreadOnly, favoritesOnly, newsletters) {
+                    key(unreadOnly, favoritesOnly, newsletters, kagi) {
                         LightTopBar(
                             leftButton = LightBarButton.LightIcon(
                                 icon = LightIcons.LIST,
                                 onClick = {
-                                    if (newsletters) {
-                                        navigateTo({ MailboxScreen(it, repository) })
-                                    } else {
-                                        navigateTo({ FeedsScreen(it, repository) })
+                                    when {
+                                        newsletters -> navigateTo({ MailboxScreen(it, repository) })
+                                        kagi -> navigateTo({ KagiScreen(it, repository) })
+                                        else -> navigateTo({ FeedsScreen(it, repository) })
                                     }
                                 },
-                                contentDescription = if (newsletters) "Mailbox" else "Subscriptions",
+                                contentDescription = when {
+                                    newsletters -> "Mailbox"
+                                    kagi -> "Kagi categories"
+                                    else -> "Subscriptions"
+                                },
                             ),
                             center = LightTopBarCenter.Text(
                                 when {
                                     newsletters -> "Newsletters"
+                                    kagi -> "Kagi News"
                                     favoritesOnly -> "Favorites"
                                     else -> "RSS"
                                 },
@@ -153,23 +161,40 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                         else -> null
                     },
                 )
-                ArticleList(
-                    articles = articles,
-                    emptyMessage = emptyMessage(newsletters, unreadOnly, favoritesOnly, favoriteCount, labelCount),
-                    onOpen = { row ->
-                        navigateTo({ articleReader(it, row.article.id, repository) })
-                    },
-                    modifier = Modifier.weight(1f),
-                    imageStore = imageStore,
-                    listState = listState,
-                )
+                if (kagi) {
+                    // Kagi is read a category at a time — a dozen stories, done — so the tab is
+                    // the list of categories, not their stories shuffled together.
+                    if (kagiFeeds.isEmpty()) {
+                        EmptyState(
+                            "No Kagi categories yet.\n\nOpen the list button to follow World, Tech, your city…",
+                            Modifier.weight(1f),
+                        )
+                    } else {
+                        FeedList(
+                            feeds = kagiFeeds,
+                            onOpen = { row -> navigateTo({ FeedScreen(it, row.feed.id, repository) }) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                } else {
+                    ArticleList(
+                        articles = articles,
+                        emptyMessage = emptyMessage(newsletters, unreadOnly, favoritesOnly, favoriteCount, labelCount),
+                        onOpen = { row ->
+                            navigateTo({ articleReader(it, row.article.id, repository) })
+                        },
+                        modifier = Modifier.weight(1f),
+                        imageStore = imageStore,
+                        listState = listState,
+                    )
+                }
                 ReaderChrome(chrome.visible) {
                     LightBottomBar(
                         items = listOf(
                             SectionTab(
                                 iconRes = R.drawable.ic_rss_white,
                                 label = "RSS",
-                                selected = !newsletters,
+                                selected = !newsletters && !kagi,
                                 onClick = { viewModel.showSection(Source.RSS) },
                             ),
                             SectionTab(
@@ -177,6 +202,12 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                                 label = "Newsletters",
                                 selected = newsletters,
                                 onClick = { viewModel.showSection(Source.GMAIL) },
+                            ),
+                            SectionTab(
+                                iconRes = R.drawable.ic_kagi_white,
+                                label = "Kagi News",
+                                selected = kagi,
+                                onClick = { viewModel.showSection(Source.KAGI) },
                             ),
                             LightBarButton.LightIcon(
                                 icon = LightIcons.REFRESH,
@@ -544,7 +575,9 @@ class FeedScreen(
         val feed by viewModel.feed.collectAsState()
         val articles by viewModel.articles.collectAsState()
         val state by viewModel.state.collectAsState()
+        val nextKagi by viewModel.nextKagi.collectAsState()
         val imageStore = rememberImageStore(repository)
+        val isKagi = feed?.sourceType == Source.KAGI
 
         WheelKeys()
         LightTheme(colors = colors) {
@@ -574,28 +607,44 @@ class FeedScreen(
                     modifier = Modifier.weight(1f),
                     imageStore = imageStore,
                 )
+                val unfollow = LightBarButton.LightIcon(
+                    LightIcons.DELETE,
+                    onClick = {
+                        val title = feed?.title ?: "this feed"
+                        navigateTo({ DeleteFeedScreen(it, feedId, title, repository) }) {
+                            goBack()
+                        }
+                    },
+                )
                 LightBottomBar(
-                    items = listOf(
-                        LightBarButton.Text("READ ALL", onClick = viewModel::markAllRead),
-                        LightBarButton.LightIcon(
-                            icon = if (feed?.isFavorite == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
-                            onClick = viewModel::toggleFavorite,
-                            contentDescription = if (feed?.isFavorite == true) {
-                                "Hide from home"
-                            } else {
-                                "Show on home"
+                    items = if (isKagi) {
+                        // Favourites narrow the RSS home list; a Kagi category is read on its own.
+                        // NEXT turns the page to the following category, so a morning's reading
+                        // is one tap per category rather than a trip back to the list each time.
+                        listOf(
+                            LightBarButton.Text("READ ALL", onClick = viewModel::markAllRead),
+                            nextKagi?.let { next ->
+                                LightBarButton.Text("NEXT", onClick = {
+                                    navigateTo({ FeedScreen(it, next.id, repository) })
+                                })
                             },
-                        ),
-                        LightBarButton.LightIcon(
-                            LightIcons.DELETE,
-                            onClick = {
-                                val title = feed?.title ?: "this feed"
-                                navigateTo({ DeleteFeedScreen(it, feedId, title, repository) }) {
-                                    goBack()
-                                }
-                            },
-                        ),
-                    ),
+                            unfollow,
+                        )
+                    } else {
+                        listOf(
+                            LightBarButton.Text("READ ALL", onClick = viewModel::markAllRead),
+                            LightBarButton.LightIcon(
+                                icon = if (feed?.isFavorite == true) LightIcons.STAR else LightIcons.STAR_OUTLINE,
+                                onClick = viewModel::toggleFavorite,
+                                contentDescription = if (feed?.isFavorite == true) {
+                                    "Hide from home"
+                                } else {
+                                    "Show on home"
+                                },
+                            ),
+                            unfollow,
+                        )
+                    },
                 )
             }
         }
@@ -814,10 +863,12 @@ class ReaderScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val row by viewModel.article.collectAsState()
+        val fetchingFullText by viewModel.fetchingFullText.collectAsState()
         val article = row?.article
         val imageStore = rememberImageStore(repository)
         val colour by repository.colourEnabled.collectAsState(initial = true)
         val scroll = rememberScrollState()
+        val isKagi = article?.guid?.startsWith("kagi:") == true
 
         // Only while there is actually something to see in colour. An article the feed gave no
         // picture for has nothing but white-on-black type on screen, and lifting the whole
@@ -845,6 +896,7 @@ class ReaderScreen(
                         },
                     ),
                 )
+                StatusLine(if (fetchingFullText) "FETCHING THE WHOLE ARTICLE…" else null)
                 if (article == null) {
                     EmptyState("Loading article…", Modifier.weight(1f))
                 } else {
@@ -864,7 +916,7 @@ class ReaderScreen(
                             LightText(
                                 text = article.title,
                                 variant = LightTextVariant.Subheading,
-                                maxLines = 4,
+                                maxLines = 6,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
                             )
@@ -883,8 +935,13 @@ class ReaderScreen(
                                 article = article,
                                 imageStore = imageStore,
                                 modifier = Modifier.fillMaxWidth(),
+                                onLink = { link ->
+                                    navigateTo({
+                                        ReaderPageScreen(it, article.id + ":" + link.url.hashCode(), link.url, link.text, repository)
+                                    })
+                                },
                             )
-                            val source = sourceHost(article.link)
+                            val source = if (isKagi) "" else sourceHost(article.link)
                             if (source.isNotBlank()) {
                                 LightText(
                                     text = source,
@@ -899,8 +956,13 @@ class ReaderScreen(
                             // Actions sit at the end of the article rather than in a fixed bar, the
                             // way the reader-mode page does, so the text gets the whole screen.
                             val link = article.link
-                            if (link.isNotBlank()) {
-                                SettingsRow("OPEN", "Read the full page here") {
+                            if (link.isNotBlank() && !isKagi) {
+                                val hasFullText = article.readerBlocks.isNotBlank() &&
+                                    article.readerBlocks != RssRepository.FULL_TEXT_UNAVAILABLE
+                                SettingsRow(
+                                    title = "OPEN",
+                                    detail = if (hasFullText) "Fetch the page again" else "Read the full page here",
+                                ) {
                                     navigateTo({
                                         ReaderPageScreen(it, article.id, link, article.title, repository)
                                     })
@@ -1053,6 +1115,7 @@ class SettingsScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val imagesEnabled by viewModel.imagesEnabled.collectAsState()
+        val fullTextEnabled by viewModel.fullTextEnabled.collectAsState()
         val colourEnabled by viewModel.colourEnabled.collectAsState()
         val scroll = rememberScrollState()
 
@@ -1077,6 +1140,16 @@ class SettingsScreen(
                     }
                     SettingsRow("MAILBOX", "Gmail account, labels and newsletter rendering") {
                         navigateTo({ MailboxScreen(it, repository) })
+                    }
+                    SettingsRow(
+                        title = if (fullTextEnabled) "FULL ARTICLES ON" else "FULL ARTICLES OFF",
+                        detail = if (fullTextEnabled) {
+                            "The whole story is fetched behind a feed's summary"
+                        } else {
+                            "Only what the feed sends; OPEN fetches the page"
+                        },
+                    ) {
+                        viewModel.setFullTextEnabled(!fullTextEnabled)
                     }
                     SettingsRow(
                         title = if (imagesEnabled) "IMAGES ON" else "IMAGES OFF",

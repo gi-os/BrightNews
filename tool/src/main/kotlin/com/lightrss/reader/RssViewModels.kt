@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -88,6 +89,8 @@ class HomeViewModel(
     val labelCount: StateFlow<Int> = repository.observeFeeds(Source.GMAIL)
         .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val kagiFeeds: StateFlow<List<FeedRow>> = repository.observeKagiFeeds()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val syncState: StateFlow<SyncState> = repository.syncState
 
     private var initialized = false
@@ -240,6 +243,19 @@ class FeedViewModel(
     private val _state = MutableStateFlow(FeedUiState())
     val state = _state.asStateFlow()
 
+    /**
+     * For a Kagi category: the one to read next, so the end of Tech leads into World the way
+     * turning a page does. Null for anything else, and for a lone category.
+     */
+    private val _nextKagi = MutableStateFlow<FeedEntity?>(null)
+    val nextKagi: StateFlow<FeedEntity?> = _nextKagi.asStateFlow()
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            _nextKagi.value = repository.nextKagiFeed(feedId)
+        }
+    }
+
     fun refresh() {
         if (_state.value.isRefreshing) return
         _state.update { it.copy(isRefreshing = true, message = null) }
@@ -356,8 +372,27 @@ class ReaderViewModel(
     val article: StateFlow<ArticleRow?> = repository.observeArticle(articleId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** True while the whole article is being fetched behind the feed's summary. */
+    private val _fetchingFullText = MutableStateFlow(false)
+    val fetchingFullText: StateFlow<Boolean> = _fetchingFullText.asStateFlow()
+
     init {
         viewModelScope.launch(Dispatchers.IO) { repository.setRead(articleId, true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            // Wait for the row, then fetch the rest of the story if the feed only sent a taste
+            // of it and nothing has fetched it yet. Newsletters and Kagi stories are whole already.
+            val row = article.first { it != null } ?: return@launch
+            if (!repository.fullTextEnabled.first()) return@launch
+            val entity = row.article
+            if (entity.readerBlocks.isNotEmpty() || entity.link.isBlank()) return@launch
+            if (NewsletterSync.isNewsletter(entity.id) || entity.guid.startsWith("kagi:")) return@launch
+            _fetchingFullText.value = true
+            try {
+                repository.fetchFullText(entity)
+            } finally {
+                _fetchingFullText.value = false
+            }
+        }
     }
 
     fun toggleStar() {
@@ -448,6 +483,13 @@ class SettingsViewModel(private val repository: RssRepository) : LightViewModel<
     val colourEnabled: StateFlow<Boolean> = repository.colourEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
+    val fullTextEnabled: StateFlow<Boolean> = repository.fullTextEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setFullTextEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) { repository.setFullTextEnabled(enabled) }
+    }
+
     fun setColourEnabled(enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) { repository.setColourEnabled(enabled) }
     }
@@ -469,6 +511,75 @@ class SettingsViewModel(private val repository: RssRepository) : LightViewModel<
     fun clearRead() {
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteReadUnstarred()
+        }
+    }
+}
+
+
+/** The Kagi categories being followed, with their unread counts. */
+class KagiFeedsViewModel(private val repository: RssRepository) : LightViewModel<Unit>() {
+    val feeds: StateFlow<List<FeedRow>> = repository.observeKagiFeeds()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+}
+
+data class KagiPickerUiState(
+    val isLoading: Boolean = true,
+    val shelved: List<Kagi.Shelved> = emptyList(),
+    /** Category urls already followed; the picker shows these as such and does not add twice. */
+    val followed: Set<String> = emptySet(),
+    /** Parent rows opened to show their children. */
+    val expanded: Set<String> = emptySet(),
+    /** The category url being added right now, if any. */
+    val adding: String? = null,
+    val error: String? = null,
+)
+
+/**
+ * Kagi's ~190 categories, shelved so the wheel can get through them: the general ones first,
+ * then places folded under their parent (USA holds two dozen cities and states; the bare
+ * countries fold under one row), then topics alphabetically.
+ */
+class KagiPickerViewModel(private val repository: RssRepository) : LightViewModel<Long>() {
+    private val _state = MutableStateFlow(KagiPickerUiState())
+    val state: StateFlow<KagiPickerUiState> = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val categories = repository.kagiCategories()
+                val followed = repository.followedKagiUrls()
+                _state.update {
+                    it.copy(isLoading = false, shelved = Kagi.shelve(categories), followed = followed)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _state.update { it.copy(isLoading = false, error = RssRepository.friendlyMessage(error)) }
+            }
+        }
+    }
+
+    fun toggleExpanded(parent: String) {
+        _state.update {
+            it.copy(expanded = if (parent in it.expanded) it.expanded - parent else it.expanded + parent)
+        }
+    }
+
+    fun clearError() = _state.update { it.copy(error = null) }
+
+    fun follow(category: Kagi.Category, onFollowed: (Long) -> Unit) {
+        if (_state.value.adding != null || category.url in _state.value.followed) return
+        _state.update { it.copy(adding = category.url) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val feedId = repository.addKagiCategory(category)
+                _state.update { it.copy(adding = null, followed = it.followed + category.url) }
+                withContext(Dispatchers.Main) { onFollowed(feedId) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _state.update { it.copy(adding = null, error = RssRepository.friendlyMessage(error)) }
+            }
         }
     }
 }

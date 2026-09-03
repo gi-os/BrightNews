@@ -4,6 +4,32 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 2.9.0 - 2026-09-03
+
+### Added
+
+- Kagi News as a third section. A Kagi category (`Source.KAGI`) is a `FeedEntity` whose url is
+  the category's public JSON file under `news.kagi.com`; each story ("cluster") is an
+  `ArticleEntity` whose summary, highlights, quote, perspectives, timeline, did-you-know and
+  source list travel as `ContentBlock`s. New block kinds `Heading` and `Link` (`H\t`, `L\t`
+  records; older decoders skip them). The Kagi tab on home lists followed categories with
+  unread counts; a category's stories sit in Kagi's ranking (edition timestamp stepped back
+  one second per rank); NEXT in the category's bottom bar moves to the following category.
+- A picker for Kagi's ~190 categories, shelved: the general categories, then places folded
+  under a parent (`USA | Texas` under USA, bare countries under one row), then topics. The
+  index is cached a day in `app_metadata`.
+- Full-text RSS articles. `ArticleEntity.readerBlocks` (schema 4 → 5) holds the article's
+  page as extracted by `ReaderExtractor`; the reader fetches it on first open and refreshes
+  prefetch the newest twelve unread. A page that cannot be read stores a sentinel so it is
+  not retried on refresh. `FULL ARTICLES` in Settings turns it off.
+
+### Changed
+
+- Kagi stories seen in another followed category within 36 hours are not stored again; Kagi
+  editions older than a week are trimmed (saved and archived stories exempt).
+- With images off, a body that has text blocks now shows the text blocks rather than the
+  feed's plain summary.
+
 ## 2.8.0 - 2026-09-01
 
 ### Fixed

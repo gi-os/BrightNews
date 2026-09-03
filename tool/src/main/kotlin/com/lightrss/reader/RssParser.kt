@@ -43,6 +43,12 @@ data class ParsedArticle(
 sealed interface ContentBlock {
     data class Text(val text: String) : ContentBlock
     data class Image(val url: String) : ContentBlock
+
+    /** A section label, set small and light above the blocks that follow it. */
+    data class Heading(val text: String) : ContentBlock
+
+    /** A tappable line that opens [url] in the reader — a story's sources, mostly. */
+    data class Link(val text: String, val url: String) : ContentBlock
 }
 
 /**
@@ -54,17 +60,28 @@ object ContentBlocks {
         when (block) {
             is ContentBlock.Text -> "T\t" + escape(block.text)
             is ContentBlock.Image -> "I\t" + escape(block.url)
+            is ContentBlock.Heading -> "H\t" + escape(block.text)
+            // Two fields on one record: the text may contain anything, so the URL goes first,
+            // since a URL never carries a raw tab and can be split off cleanly.
+            is ContentBlock.Link -> "L\t" + escape(block.url) + "\t" + escape(block.text)
         }
     }
 
     fun decode(value: String): List<ContentBlock> {
         if (value.isBlank()) return emptyList()
         return value.split('\n').mapNotNull { line ->
-            val payload = unescape(line.substringAfter('\t', ""))
+            val raw = line.substringAfter('\t', "")
+            val payload = unescape(raw)
             when {
                 payload.isBlank() -> null
                 line.startsWith("T\t") -> ContentBlock.Text(payload)
                 line.startsWith("I\t") -> ContentBlock.Image(payload)
+                line.startsWith("H\t") -> ContentBlock.Heading(payload)
+                line.startsWith("L\t") -> {
+                    val url = unescape(raw.substringBefore('\t'))
+                    val text = unescape(raw.substringAfter('\t', ""))
+                    if (url.isBlank()) null else ContentBlock.Link(text.ifBlank { url }, url)
+                }
                 else -> null
             }
         }

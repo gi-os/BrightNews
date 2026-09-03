@@ -232,9 +232,11 @@ fun ArticleBody(
     article: ArticleEntity,
     imageStore: ArticleImageStore?,
     modifier: Modifier = Modifier,
+    onLink: ((ContentBlock.Link) -> Unit)? = null,
 ) {
-    val blocks = remember(article.id, article.contentBlocks) {
-        ContentBlocks.decode(article.contentBlocks)
+    // The whole story, when the reader has fetched it, beats the paragraph the feed sent.
+    val blocks = remember(article.id, article.contentBlocks, article.readerBlocks) {
+        ContentBlocks.decode(article.readerBlocks.ifBlank { article.contentBlocks })
     }
     val text = article.content.ifBlank { article.summary }
 
@@ -242,7 +244,10 @@ fun ArticleBody(
         if (imageStore != null && article.imageUrl.isNotBlank() && !blocks.leadsWith(article.imageUrl)) {
             ArticleImage(imageStore, article.imageUrl)
         }
-        if (blocks.isEmpty() || imageStore == null) {
+        // A body made only of images has nothing to show with images off, so fall back to the
+        // text; a body with any text or link in it is shown as blocks whatever the setting.
+        val showBlocks = blocks.any { it !is ContentBlock.Image } || (blocks.isNotEmpty() && imageStore != null)
+        if (!showBlocks) {
             LightText(
                 text = text.ifBlank { "This feed did not include article text." },
                 variant = LightTextVariant.Paragraph,
@@ -251,19 +256,21 @@ fun ArticleBody(
             )
             return@Column
         }
-        ContentBlocksBody(blocks, imageStore)
+        ContentBlocksBody(blocks, imageStore, onLink = onLink)
     }
 }
 
 /**
- * Renders ordered text and image blocks. Images are skipped entirely when [imageStore] is null,
- * which is what Settings does when images are switched off.
+ * Renders ordered text, heading, link and image blocks. Images are skipped entirely when
+ * [imageStore] is null, which is what Settings does when images are switched off. Links are
+ * plain text when nothing is listening for them.
  */
 @Composable
 fun ContentBlocksBody(
     blocks: List<ContentBlock>,
     imageStore: ArticleImageStore?,
     modifier: Modifier = Modifier,
+    onLink: ((ContentBlock.Link) -> Unit)? = null,
 ) {
     Column(modifier = modifier) {
         blocks.forEach { block ->
@@ -273,6 +280,44 @@ fun ContentBlocksBody(
                     variant = LightTextVariant.Paragraph,
                     modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
                 )
+                is ContentBlock.Heading -> LightText(
+                    text = block.text.uppercase(Locale.US),
+                    variant = LightTextVariant.Superfine,
+                    lighten = true,
+                    modifier = Modifier.padding(top = 1.5f.gridUnitsAsDp()),
+                )
+                is ContentBlock.Link -> {
+                    val clickable = if (onLink != null) {
+                        Modifier.lightClickable(onClickLabel = "Open ${block.text}", role = Role.Button) {
+                            onLink(block)
+                        }
+                    } else {
+                        Modifier
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(clickable)
+                            .padding(top = 0.6f.gridUnitsAsDp()),
+                    ) {
+                        LightText(
+                            text = block.text,
+                            variant = LightTextVariant.Detail,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        val host = sourceHost(block.url)
+                        if (host.isNotBlank() && !block.text.equals(host, ignoreCase = true)) {
+                            LightText(
+                                text = host,
+                                variant = LightTextVariant.Superfine,
+                                lighten = true,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
                 is ContentBlock.Image -> if (imageStore != null) ArticleImage(imageStore, block.url)
             }
         }

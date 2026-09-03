@@ -3,9 +3,9 @@
 # News
 
 Everything you subscribed to, on the Light Phone III. RSS and Atom feeds in one section,
-Gmail newsletters in the other, both read in the same reader. Built on the Light SDK; tool
-id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and search stay on
-the phone. Current release: **v2.6.2** (`tool/lighttool.toml`: versionCode 27).
+Gmail newsletters in another, Kagi News in a third, all read in the same reader. Built on the
+Light SDK; tool id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and
+search stay on the phone. Current release: **v2.9.0** (`tool/lighttool.toml`: versionCode 30).
 
 ## Install via BrightMarket
 
@@ -94,6 +94,23 @@ dark logos drawn on transparent backgrounds. **PAPER** keeps the newsletter's ow
 only fixes the width, which is what brand-heavy issues want; a panel showing black on white is
 the closest thing to the paper these were designed for. Sponsor blocks are cut by default
 and a marker is left where each one was, so a wrong guess is visible rather than silent.
+
+## Kagi News
+
+[Kagi News](https://news.kagi.com) publishes its edition as public JSON — `kite.json` lists
+the categories, and each category file holds a dozen stories synthesised from dozens of
+sources. No key, no account. **News → Kagi News tab → list button → +** to follow a category;
+the picker shelves the ~190 of them as Kagi's general categories, places folded under a parent,
+and topics. Each category is read on its own, in Kagi's ranking, and NEXT moves to the next
+one. A story's sources open in the reader. Kagi refreshes about once a day; the app asks
+conditionally, so nothing is downloaded when nothing changed. See `Kagi.kt`.
+
+## Full articles
+
+A feed usually sends a paragraph. On first open the reader fetches the linked page, reduces it
+to its body copy with `ReaderExtractor`, and stores the result on the article, so it reads whole
+now and offline later; refreshes fetch the newest unread articles ahead of time. Paywalls and
+bot checks fall back to the feed's text. **Settings → FULL ARTICLES** turns it off.
 
 ## Colour
 
@@ -277,6 +294,9 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v2.9.0  | —         | Kagi News as a third section — categories are feeds, stories carry their highlights, perspectives, timeline and sources; a shelved picker for the 190 categories. RSS articles fetch their whole page on open and ahead of time |
+| v2.8.0  | —         | An article's identity belongs to the feed, not to whichever mirror answered |
+| v2.7.0  | —         | Every server reply tolerates drift, not just the keyboard's |
 | v2.6.2  | —         | Opening anything with a text field no longer crashes the tool on a newer LightOS, and a two-line headline stops clipping the feed name under it |
 | v2.6.0  | —         | The archive is a place you can look. Archived articles are listed, restorable one at a time or all at once, and no longer trimmed away |
 | v2.3.0  | —         | Pictures show in colour on a phone that stays grey, via the daltonizer and a one-time adb grant |

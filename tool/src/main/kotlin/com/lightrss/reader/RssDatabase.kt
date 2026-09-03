@@ -20,6 +20,13 @@ import kotlinx.coroutines.flow.Flow
 object Source {
     const val RSS = "RSS"
     const val GMAIL = "GMAIL"
+
+    /**
+     * A Kagi News category. Kagi publishes each category as a public JSON file of a dozen
+     * synthesised stories a day; the category is the feed, each story is an article, and the
+     * story's sections travel in [ArticleEntity.contentBlocks]. See `Kagi.kt`.
+     */
+    const val KAGI = "KAGI"
 }
 
 @Entity(
@@ -80,6 +87,15 @@ data class ArticleEntity(
     val imageUrl: String = "",
     /** Body blocks encoded by [ContentBlocks]; empty when the article has no inline images. */
     val contentBlocks: String = "",
+    /**
+     * The article's linked page, read out of the page itself and encoded by [ContentBlocks].
+     *
+     * Most feeds hand out a paragraph and a link. This is the rest of the story, fetched the
+     * first time the article is opened (or ahead of time on a refresh) so the reader shows the
+     * whole thing where the summary used to be, and shows it again offline. Empty until fetched,
+     * and left empty when the page turned out to be a paywall or a bot check.
+     */
+    val readerBlocks: String = "",
     val isRead: Boolean = false,
     val isStarred: Boolean = false,
     val isArchived: Boolean = false,
@@ -683,6 +699,74 @@ interface RssDao {
         }
     }
 
+    /* ------------------------------------------------------------------ full text */
+
+    @Query("UPDATE articles SET readerBlocks = :blocks WHERE id = :articleId")
+    suspend fun setReaderBlocks(articleId: String, blocks: String)
+
+    /**
+     * Unread RSS articles that still have only what the feed gave them, newest first — the
+     * ones a refresh fetches full text for before they are opened.
+     */
+    @Query(
+        """
+        SELECT a.* FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE f.sourceType = 'RSS' AND a.isRead = 0 AND a.isArchived = 0
+          AND a.readerBlocks = '' AND a.link != ''
+        ORDER BY a.publishedAt DESC, a.insertedAt DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun articlesAwaitingFullText(limit: Int): List<ArticleEntity>
+
+    /* ------------------------------------------------------------------ Kagi */
+
+    /**
+     * Kagi feeds in the order they read in: the order they were added. The picker lists
+     * categories in Kagi's own order, so following World before Tech keeps them that way.
+     */
+    @Query("SELECT * FROM feeds WHERE sourceType = 'KAGI' ORDER BY addedAt, id")
+    suspend fun getKagiFeeds(): List<FeedEntity>
+
+    @Query(
+        """
+        SELECT f.*,
+            CAST(SUM(CASE WHEN a.isRead = 0 AND a.isArchived = 0 THEN 1 ELSE 0 END) AS INTEGER) AS unreadCount,
+            CAST(COUNT(a.id) AS INTEGER) AS articleCount
+        FROM feeds f LEFT JOIN articles a ON a.feedId = f.id
+        WHERE f.sourceType = 'KAGI'
+        GROUP BY f.id
+        ORDER BY f.addedAt, f.id
+        """,
+    )
+    fun observeKagiFeeds(): Flow<List<FeedRow>>
+
+    /**
+     * The same story lands in World, USA and Middle East on a heavy day. A story already held
+     * by another Kagi category from the same publish window is not stored twice; the category
+     * refreshed first keeps it.
+     */
+    @Query(
+        """
+        SELECT COUNT(*) FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE f.sourceType = 'KAGI' AND a.feedId != :feedId AND a.guid = :guid
+          AND a.publishedAt > :since
+        """,
+    )
+    suspend fun kagiStoryHeldElsewhere(feedId: Long, guid: String, since: Long): Int
+
+    /**
+     * Kagi replaces its dozen stories every day, so a category grows by a dozen rows a day
+     * forever unless something forgets the old ones. Saved and archived stories are kept.
+     */
+    @Query(
+        """
+        DELETE FROM articles
+        WHERE feedId = :feedId AND isStarred = 0 AND isArchived = 0 AND publishedAt < :before
+        """,
+    )
+    suspend fun trimKagi(feedId: Long, before: Long)
+
     /* ------------------------------------------------------------------ id re-key */
 
     @Query(
@@ -763,7 +847,7 @@ interface RssDao {
         NewsletterBodyEntity::class,
         AppMetadataEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class RssDatabase : RoomDatabase() {
@@ -809,6 +893,17 @@ abstract class RssDatabase : RoomDatabase() {
                     )
                     """.trimIndent(),
                 )
+            }
+        }
+
+        /**
+         * Full text arrives. One empty column; every existing article fills it the first time it
+         * is opened, and nothing else about the row changes. Kagi needs no schema of its own — a
+         * category is a feed row with a sourceType, the way a Gmail label already is.
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE articles ADD COLUMN readerBlocks TEXT NOT NULL DEFAULT ''")
             }
         }
     }

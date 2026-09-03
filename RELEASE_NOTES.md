@@ -1,31 +1,43 @@
-# News 2.8.0
+# News 2.9.0
 
-**A feed that answers from a different address on every fetch no longer reappears unread.**
+**Kagi News is a third section.**
 
-An article's id used to be hashed from the address the fetch actually landed on, after
-redirects — and the app rewrote the stored feed address to that landing spot on every refresh.
-For most feeds the two never differ. For a feed behind a rotating mirror, a tracking
-parameter, or an http-to-https bounce, they differ every time, so every article got a brand-new
-id on every refresh: the whole feed came back unread, and everything you had read, starred or
-archived was orphaned under ids nothing would ever generate again. An article's identity now
-belongs to the feed you subscribed to — the feed's own database id — not to whichever mirror
-happened to answer.
+Kagi publishes its whole edition as public JSON — no key, no account: about 190 categories,
+each a dozen stories a day, each story drawn from forty-odd articles and written up with a
+summary, highlights, perspectives, a quote, a timeline and the source list. A category is now a
+feed here, the way a Gmail label already was, so reading, saving, archiving and search all work
+on a Kagi story without knowing where it came from.
 
-**Existing articles are re-keyed once, in place.**
+The Kagi tab on home is the list of categories you follow, with unread counts, because a
+category is meant to be read on its own — twelve stories, done — not shuffled into one long
+list with the others. Inside a category the stories sit in Kagi's own ranking; **NEXT** in the
+bottom bar turns the page to the following category so a morning's reading is one tap per
+section. A story's sources are tappable and open in the reader. Footnote markers
+(`[site.com#3]`) are stripped from the prose since the sources are listed underneath.
 
-On the first launch after this update, every RSS article's id is recomputed under the new
-scheme in a single transaction, guarded by a flag so it never runs twice. Read, starred and
-archived travel with each row exactly as they were — the rewrite touches only the id. Where the
-old scheme had stored the same article more than once under different addresses, the copies
-collapse to one, and the copy you acted on (starred, then archived, then read) is the one that
-survives. Gmail newsletters are untouched: their identity is the message id and never depended
-on a URL.
+**Picking from 190 categories.** The picker shelves them: Kagi's general categories first
+(World, USA, Business, Technology, Science, Sports, Gaming, Bay Area, On This Day), then places
+folded under their parent — USA holds two dozen cities and states, Germany eight regions, and
+the bare countries fold under one row — then the topics alphabetically. Nothing is more than
+two taps deep. A category already followed says so and does not add twice.
 
-**The address you subscribed with is now the one the app keeps.**
+**The same story is not stored twice.** A big story lands in World, USA and Middle East on the
+same day. A story already held by another Kagi category from the same edition window is
+skipped; the category refreshed first keeps it. Editions older than a week are trimmed unless
+saved or archived. Refreshes are conditional (ETag / Last-Modified), so a day with no new
+edition costs one small request per category.
 
-Refreshes still update a feed's title, description, caching headers and fetch time, but they no
-longer overwrite the stored address with wherever the last fetch resolved. Every fetch starts
-from the address you gave it; conditional requests go by ETag and Last-Modified as before.
+**RSS articles are whole now, not a paragraph and a link.**
 
-Nothing about the database schema changed, so this installs over 2.7.0 and keeps every
-subscription, label, read state and saved article.
+Most feeds send a summary. The reader used to show that, with an OPEN row that fetched the
+page on demand. Now the page is fetched the first time an article is opened — the whole
+story replaces the summary in place, with a status line while it loads — and the newest dozen
+unread articles are fetched ahead of time on every refresh, so most articles open whole and
+offline. The result is stored on the row, so it is never fetched twice, and it survives a
+feed refresh. A paywall, a bot check or a page with no body copy falls back to the feed's
+own text and is not retried on later refreshes; OPEN still tries again on demand. Newsletters
+and Kagi stories are already whole and are left alone. **FULL ARTICLES** in Settings turns
+the fetching off.
+
+Schema moves from version 4 to 5 — one new column, empty until an article is opened. This
+installs over 2.8.0 and keeps every subscription, label, read state and saved article.
