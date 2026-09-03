@@ -249,11 +249,18 @@ private fun StoryRow(rank: Int, row: ArticleRow, onOpen: (ArticleRow) -> Unit) {
                     .padding(top = 0.4f.gridUnitsAsDp()),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
+                // `ANTITRUST · 11 SOURCES`: the one word that makes a dozen headlines scannable,
+                // then how many places said so.
                 LightText(
-                    text = if (article.sourceCount > 0) "${article.sourceCount} SOURCES" else "",
+                    text = listOfNotNull(
+                        Briefing.topic(article).takeIf { it.isNotBlank() }?.uppercase(Locale.US),
+                        article.sourceCount.takeIf { it > 0 }?.let { "$it SOURCES" },
+                    ).joinToString(" · "),
                     variant = LightTextVariant.Superfine,
                     lighten = true,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(end = 0.5f.gridUnitsAsDp()),
                 )
                 LightText(
                     text = relativeTime(article.publishedAt),
@@ -279,6 +286,7 @@ fun TimelineList(
     items: List<Briefing.TimelineItem>,
     emptyMessage: String,
     onOpen: (ArticleRow) -> Unit,
+    onToggleBucket: (String) -> Unit,
     modifier: Modifier = Modifier,
     imageStore: ArticleImageStore? = null,
     listState: LazyListState = rememberLazyListState(),
@@ -305,7 +313,11 @@ fun TimelineList(
         val paragraphLh = with(density) { typography.paragraph.lineHeight.toPx() }
         items.mapIndexed { index, item ->
             when (item) {
-                is Briefing.TimelineItem.Header -> if (index == 0) HEADER_FIRST_UNITS else HEADER_UNITS
+                is Briefing.TimelineItem.Header -> when {
+                    index == 0 -> HEADER_FIRST_UNITS
+                    item.folded -> HEADER_FOLDED_UNITS
+                    else -> HEADER_UNITS
+                }
                 is Briefing.TimelineItem.Story -> {
                     val hasThumb = imageStore != null && item.row.article.imageUrl.isNotBlank()
                     val width = (textWidthPx - if (hasThumb) thumbPx else 0f).toInt().coerceAtLeast(1)
@@ -333,7 +345,7 @@ fun TimelineList(
     ) {
         items(items.size, key = { items[it].key }) { index ->
             when (val item = items[index]) {
-                is Briefing.TimelineItem.Header -> BucketHeader(item.label, heights[index])
+                is Briefing.TimelineItem.Header -> BucketHeader(item, heights[index], onToggleBucket)
                 is Briefing.TimelineItem.Story -> TimelineRow(
                     row = item.row,
                     onOpen = onOpen,
@@ -347,16 +359,39 @@ fun TimelineList(
     }
 }
 
+/**
+ * A bucket's label. An older bucket is a tap: folded it reads `MONDAY · 14 ▸`, open `MONDAY ▾`.
+ */
 @Composable
-private fun BucketHeader(label: String, heightUnits: Float) {
+private fun BucketHeader(header: Briefing.TimelineItem.Header, heightUnits: Float, onToggle: (String) -> Unit) {
+    val foldable = header.count > 0
+    val clickable = if (foldable) {
+        Modifier.lightClickable(
+            onClickLabel = if (header.folded) "Show ${header.label}" else "Fold ${header.label}",
+            role = Role.Button,
+        ) { onToggle(header.label) }
+    } else {
+        Modifier
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(heightUnits.gridUnitsAsDp())
+            .then(clickable)
             .padding(start = SIDE_MARGIN_UNITS.gridUnitsAsDp(), end = ROW_END_MARGIN_UNITS.gridUnitsAsDp()),
         contentAlignment = Alignment.BottomStart,
     ) {
-        LightText(label, LightTextVariant.Fine, lighten = true, maxLines = 1)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            LightText(header.label, LightTextVariant.Fine, lighten = true, maxLines = 1)
+            if (foldable) {
+                LightText(
+                    text = if (header.folded) "${header.count} ▸" else "▾",
+                    variant = LightTextVariant.Fine,
+                    lighten = true,
+                    maxLines = 1,
+                )
+            }
+        }
     }
 }
 
@@ -435,6 +470,8 @@ private fun TimelineRow(
 
 private const val TOP_N = 3
 private const val HEADER_UNITS = 3f
+/** A folded bucket is a row of its own, so it gets a row's worth of height to tap. */
+private const val HEADER_FOLDED_UNITS = 3.4f
 /** The mock's 12 px / 5 px at 360 wide, in units. */
 private const val STORY_PAD_UNITS = 0.9f
 private const val STORY_GAP_UNITS = 0.375f

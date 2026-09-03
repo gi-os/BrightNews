@@ -569,6 +569,14 @@ class RssRepository(
         return feeds[(index + 1) % feeds.size]
     }
 
+    /** The most recent daily Kagi publish time at or before [now] (about 12:00 UTC). */
+    private fun todaysEditionAt(now: Long): Long {
+        val utc = java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneOffset.UTC)
+        var due = utc.toLocalDate().atTime(KAGI_EDITION_HOUR_UTC, 0).toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
+        if (due > now) due -= 24 * 60 * 60 * 1_000L
+        return due
+    }
+
     private suspend fun refreshKagi(feed: FeedEntity) {
         when (val result = api.loadText(feed.url, feed.etag, feed.lastModified)) {
             TextLoadResult.NotModified -> dao.markFeedNotModified(feed.id, System.currentTimeMillis())
@@ -663,7 +671,13 @@ class RssRepository(
         if (!syncMutex.tryLock()) return
         try {
             val feeds = dao.getFeeds()
-            if (!force && feeds.isNotEmpty() && feeds.all { System.currentTimeMillis() - it.lastFetchedAt < AUTO_REFRESH_AGE_MS }) {
+            val now = System.currentTimeMillis()
+            // The fifteen-minute rule is for feeds. Kagi publishes once a day around noon UTC,
+            // and a briefing opened at breakfast should not wait a quarter of an hour for it:
+            // a Kagi feed last fetched before today's edition is due is refreshed regardless.
+            val editionDue = todaysEditionAt(now)
+            val kagiStale = feeds.any { it.sourceType == Source.KAGI && it.lastFetchedAt < editionDue && now >= editionDue }
+            if (!force && !kagiStale && feeds.isNotEmpty() && feeds.all { now - it.lastFetchedAt < AUTO_REFRESH_AGE_MS }) {
                 return
             }
             _syncState.value = SyncState(isRefreshing = true, totalFeeds = feeds.size)
@@ -813,6 +827,8 @@ class RssRepository(
         private const val KAGI_INDEX_KEY = "kagi_index"
         private const val KAGI_INDEX_AT_KEY = "kagi_index_at"
         private const val KAGI_INDEX_AGE_MS = 24 * 60 * 60 * 1_000L
+        /** Kagi's edition lands a little after 12:00 UTC; observed 12:03Z. */
+        private const val KAGI_EDITION_HOUR_UTC = 12
         /** A story seen in another category this recently is the same story, not a new one. */
         private const val KAGI_DUPLICATE_WINDOW_MS = 36 * 60 * 60 * 1_000L
         /** A week of editions per category; saved and archived stories are exempt from the trim. */

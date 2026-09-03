@@ -37,7 +37,12 @@ object Briefing {
     sealed interface TimelineItem {
         val key: String
 
-        data class Header(val label: String) : TimelineItem {
+        /**
+         * A bucket label. Buckets older than yesterday start folded — [count] stories behind
+         * the header, none listed — so a week of feeds reads as today's paper with yesterday
+         * underneath, not an archive. [count] is 0 for a bucket that is never folded.
+         */
+        data class Header(val label: String, val count: Int = 0, val folded: Boolean = false) : TimelineItem {
             override val key: String get() = "h:$label"
         }
 
@@ -51,19 +56,49 @@ object Briefing {
      * four in the morning, the same rule the notebook uses, so a 1 a.m. article belongs to the
      * evening it was read in and not to a morning nobody was awake for.
      */
-    fun timeline(rows: List<ArticleRow>, now: Long, zone: ZoneId): List<TimelineItem> {
+    fun timeline(
+        rows: List<ArticleRow>,
+        now: Long,
+        zone: ZoneId,
+        opened: Set<String> = emptySet(),
+    ): List<TimelineItem> {
         val out = ArrayList<TimelineItem>(rows.size + 8)
+        val counts = HashMap<String, Int>()
+        for (row in rows) counts.merge(bucket(row.article.publishedAt, now, zone), 1, Int::plus)
         var last: String? = null
+        var folded = false
         for (row in rows) {
             val label = bucket(row.article.publishedAt, now, zone)
             if (label != last) {
-                out.add(TimelineItem.Header(label))
+                val foldable = isFoldable(label)
+                folded = foldable && label !in opened
+                out.add(TimelineItem.Header(label, count = if (foldable) counts.getValue(label) else 0, folded = folded))
                 last = label
             }
-            out.add(TimelineItem.Story(row))
+            if (!folded) out.add(TimelineItem.Story(row))
         }
         return out
     }
+
+    /** Today's three buckets and yesterday stay open; everything older folds. */
+    fun isFoldable(label: String): Boolean = label !in OPEN_BUCKETS
+
+    private val OPEN_BUCKETS = setOf("THIS MORNING", "THIS AFTERNOON", "THIS EVENING", "YESTERDAY")
+
+    /**
+     * When the edition on the phone was published: the top story's stamp, stepped back one
+     * second per rank, so rank 1 is one second under the edition time. Null with no stories.
+     */
+    fun editionTime(edition: List<CategoryStories>): Long? =
+        edition.flatMap { it.stories }.maxOfOrNull { it.article.publishedAt }?.plus(1_000L)
+
+    /** `8:04 AM`. */
+    fun clockLine(at: Long, zone: ZoneId): String =
+        DateTimeFormatter.ofPattern("h:mm a", Locale.US).format(Instant.ofEpochMilli(at).atZone(zone)).uppercase(Locale.US)
+
+    /** A Kagi story's sub-topic — `Antitrust` — from the `topic · location` line it was stored with. */
+    fun topic(article: ArticleEntity): String =
+        article.author.substringBefore(" · ").trim()
 
     fun bucket(publishedAt: Long, now: Long, zone: ZoneId): String {
         val today = journalDay(now, zone)

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The day: a sun, drawn to the same spec as the other tab marks — white on transparent, 24dp,
+  2dp round-cap strokes. The briefing tab used to carry the Kagi newspaper, but the tab is the
+  day now, and Kagi is one of the things in it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M12,12 m-4.2,0 a4.2,4.2 0 1,0 8.4,0 a4.2,4.2 0 1,0 -8.4,0"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:fillColor="@android:color/transparent" />
+    <path
+        android:pathData="M12,2.5 V4.8 M12,19.2 V21.5 M2.5,12 H4.8 M19.2,12 H21.5 M5.3,5.3 L6.9,6.9 M17.1,17.1 L18.7,18.7 M5.3,18.7 L6.9,17.1 M17.1,6.9 L18.7,5.3"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+</vector>

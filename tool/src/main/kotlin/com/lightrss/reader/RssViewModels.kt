@@ -85,11 +85,25 @@ class HomeViewModel(
 
     /* ------------------------------------------------------------------ timeline */
 
+    /** Older buckets a tap has unfolded. Session state, like the briefing's sections. */
+    private val _openedBuckets = MutableStateFlow<Set<String>>(emptySet())
+
+    fun toggleBucket(label: String) {
+        _openedBuckets.update { if (label in it) it - label else it + label }
+    }
+
     val timeline: StateFlow<List<Briefing.TimelineItem>> =
         combine(unreadOnly, favoritesOnly) { unread, favourites -> unread to favourites }
             .flatMapLatest { (unread, favourites) -> repository.observeTimeline(unread, favourites) }
-            .map { rows -> Briefing.timeline(rows, System.currentTimeMillis(), java.time.ZoneId.systemDefault()) }
+            .combine(_openedBuckets) { rows, opened ->
+                Briefing.timeline(rows, System.currentTimeMillis(), java.time.ZoneId.systemDefault(), opened)
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** When the Kagi edition on the phone was published. */
+    val editionTime: StateFlow<Long?> = edition
+        .map { Briefing.editionTime(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val timelineUnread: StateFlow<Int> = repository.observeTimelineUnread()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -108,6 +122,7 @@ class HomeViewModel(
         jumpPending = true
         // Tomorrow's briefing starts folded.
         _expanded.value = emptySet()
+        _openedBuckets.value = emptySet()
     }
 
     val feedCount: StateFlow<Int> = repository.observeFeeds(Source.RSS)

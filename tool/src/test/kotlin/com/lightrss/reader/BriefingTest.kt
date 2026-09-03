@@ -51,6 +51,36 @@ class BriefingTest {
     }
 
     @Test
+    fun `older buckets fold to a counted header until opened`() {
+        val rows = listOf(
+            row("a", 1, "AP", at(9)),
+            row("b", 1, "AP", at(9, dayOffset = -1)),
+            row("c", 1, "AP", at(9, dayOffset = -3)),
+            row("d", 1, "AP", at(10, dayOffset = -3)),
+        )
+        val folded = Briefing.timeline(rows, now, zone)
+        val monday = folded.filterIsInstance<Briefing.TimelineItem.Header>().single { it.label == "MONDAY" }
+        assertEquals(2, monday.count)
+        assertEquals(true, monday.folded)
+        assertEquals(listOf("a", "b"), folded.filterIsInstance<Briefing.TimelineItem.Story>().map { it.row.article.id })
+        // Today's buckets never fold and carry no count.
+        assertEquals(0, folded.filterIsInstance<Briefing.TimelineItem.Header>().first { it.label == "THIS MORNING" }.count)
+
+        val opened = Briefing.timeline(rows, now, zone, opened = setOf("MONDAY"))
+        assertEquals(listOf("a", "b", "c", "d"), opened.filterIsInstance<Briefing.TimelineItem.Story>().map { it.row.article.id })
+    }
+
+    @Test
+    fun `edition time and topic`() {
+        val edition = Briefing.edition(listOf(row("w1", 10, "World", at(8, 4) - 1_000), row("w2", 10, "World", at(8, 4) - 2_000)))
+        assertEquals(at(8, 4), Briefing.editionTime(edition))
+        assertEquals("8:04 AM", Briefing.clockLine(at(8, 4), zone))
+        assertNull(Briefing.editionTime(emptyList()))
+        assertEquals("Antitrust", Briefing.topic(row("k", 1, "Tech", now, author = "Antitrust · Alexandria, VA").article))
+        assertEquals("", Briefing.topic(row("k", 1, "Tech", now).article))
+    }
+
+    @Test
     fun `the edition is cut at feed boundaries in the order given`() {
         val rows = listOf(
             row("w1", 10, "World", 300), row("w2", 10, "World", 200),

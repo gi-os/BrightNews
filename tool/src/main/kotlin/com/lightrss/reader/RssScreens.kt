@@ -118,6 +118,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         val todayTick by viewModel.todayTick.collectAsState()
         val timeline by viewModel.timeline.collectAsState()
         val timelineUnread by viewModel.timelineUnread.collectAsState()
+        val editionTime by viewModel.editionTime.collectAsState()
         val sync by viewModel.syncState.collectAsState()
         val jumpToNewest by viewModel.jumpToNewest.collectAsState()
         val repository = viewModel.repository
@@ -178,11 +179,16 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                         )
                     }
                 }
+                // The briefing says how old its edition is, and says so while a newer one is
+                // on its way, rather than showing yesterday's page as if it were today's.
+                val editionLine = editionTime?.let { "EDITION ${Briefing.clockLine(it, java.time.ZoneId.systemDefault())}" }
                 StatusLine(
                     when {
+                        briefing && sync.isRefreshing -> listOfNotNull(editionLine, "REFRESHING…").joinToString(" · ")
                         sync.isRefreshing -> "SYNC ${sync.completedFeeds}/${sync.totalFeeds}"
                         sync.message?.contains("could not", ignoreCase = true) == true -> sync.message
-                        !briefing && timelineUnread > 0 -> "$timelineUnread UNREAD"
+                        briefing -> editionLine
+                        timelineUnread > 0 -> "$timelineUnread UNREAD"
                         else -> null
                     },
                 )
@@ -201,6 +207,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                         items = timeline,
                         emptyMessage = emptyMessage(unreadOnly, favoritesOnly, favoriteCount, feedCount, labelCount),
                         onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
+                        onToggleBucket = viewModel::toggleBucket,
                         modifier = Modifier.weight(1f),
                         imageStore = imageStore,
                         listState = listState,
@@ -210,7 +217,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     LightBottomBar(
                         items = listOf(
                             SectionTab(
-                                iconRes = R.drawable.ic_kagi_white,
+                                iconRes = R.drawable.ic_day_white,
                                 label = "Daily Briefing",
                                 selected = briefing,
                                 onClick = { viewModel.showSection(HomeSection.BRIEFING) },

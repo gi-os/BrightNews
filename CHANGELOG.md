@@ -4,6 +4,19 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.2.0 - 2026-09-03
+
+### Changed
+
+- `Briefing.editionTime` / `clockLine`; the briefing's `StatusLine` shows the edition time and
+  `REFRESHING…`. `refreshAll(force = false)` ignores the 15-minute window for a Kagi feed whose
+  `lastFetchedAt` predates today's 12:00 UTC edition (`todaysEditionAt`).
+- Story rows show `Briefing.topic(article)` (the `topic · location` prefix) before the source count.
+- `Briefing.timeline` takes `opened`; buckets outside today/yesterday emit a `Header(count,
+  folded)` with their stories withheld until tapped (`HomeViewModel.toggleBucket`, session
+  state). `BucketHeader` is clickable when `count > 0`.
+- New `ic_day_white` (a sun) for the briefing tab; `ic_kagi_white` stays in the repo unused.
+
 ## 3.1.0 - 2026-09-03
 
 ### Changed
