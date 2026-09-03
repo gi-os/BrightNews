@@ -182,6 +182,7 @@ fun WheelScroll(
     active: Boolean = true,
     rowPx: Float? = null,
     onEdge: ((direction: Int) -> Unit)? = null,
+    edgeNotches: Int = EDGE_NOTCHES,
 ): WheelEdge {
     val step = with(LocalDensity.current) { NOTCH.toPx() }
     val debt = remember { Debt() }
@@ -194,7 +195,7 @@ fun WheelScroll(
         // At an edge, further turning is a request, not a scroll.
         if (debt.edge != 0 && direction == debt.edge) {
             debt.edgeCount += abs(notches)
-            if (debt.edgeCount >= EDGE_NOTCHES) {
+            if (debt.edgeCount >= edgeNotches) {
                 val at = debt.edge
                 // Whatever the screen does next — a new article, the next category — starts
                 // from a clean slate, or its first notches would count as more edge.

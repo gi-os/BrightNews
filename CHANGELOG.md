@@ -4,6 +4,21 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.1.0 - 2026-09-03
+
+### Changed
+
+- Briefing sections show their first three with a `MoreRow`; `HomeViewModel.expanded` (session
+  only, cleared on `onAppPause`; `CALENDAR_SECTION = -1`). Past calendar entries lightened.
+  Margins 1.5u both sides, weather flush under the date.
+- `TimelineList` measures each headline with `rememberTextMeasurer` and gives every row its
+  natural height (`STORY_PAD_UNITS` 0.9, `STORY_GAP_UNITS` 0.375) instead of a uniform two-line
+  row.
+- Reader: `turnWithSlide` animates a `graphicsLayer` translation out and in around
+  `viewModel.turn`; `UpNext` landing zone (≥55% of the screen) after the actions; a
+  `NestedScrollConnection` turns on 220 px of overscroll past either end; `WheelScroll` gains
+  `edgeNotches` (reader passes 1).
+
 ## 3.0.0 - 2026-09-03
 
 ### Changed

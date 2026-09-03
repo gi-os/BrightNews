@@ -18,10 +18,27 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import java.util.Locale
+import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.Animatable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.platform.LocalContext
@@ -96,6 +113,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         val feedCount by viewModel.feedCount.collectAsState()
         val labelCount by viewModel.labelCount.collectAsState()
         val edition by viewModel.edition.collectAsState()
+        val expanded by viewModel.expanded.collectAsState()
         val today by viewModel.today.collectAsState()
         val todayTick by viewModel.todayTick.collectAsState()
         val timeline by viewModel.timeline.collectAsState()
@@ -172,6 +190,8 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     BriefingContent(
                         today = today,
                         edition = edition,
+                        expanded = expanded,
+                        onToggle = viewModel::toggleExpanded,
                         onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                         scroll = briefingScroll,
                         modifier = Modifier.weight(1f),
@@ -908,8 +928,60 @@ class ReaderScreen(
         val scroll = rememberScrollState()
         val isKagi = article?.guid?.startsWith("kagi:") == true
 
-        // A turned page starts at the top.
-        LaunchedEffect(turned) { if (turned > 0) scroll.scrollTo(0) }
+        // Turning the page slides the article out the way you were going and the next one in
+        // from the other side; the scroll resets between the two frames so the new article
+        // starts at the top under the slide.
+        val slide = remember { Animatable(0f) }
+        val slideScope = rememberCoroutineScope()
+        var turning by remember { mutableStateOf(false) }
+        val viewportPx = with(LocalDensity.current) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+        fun turnWithSlide(direction: Int) {
+            if (turning) return
+            val target = if (direction > 0) next else previous
+            if (target == null) return
+            turning = true
+            slideScope.launch {
+                slide.animateTo(-direction * viewportPx, tween(SLIDE_OUT_MS, easing = FastOutLinearInEasing))
+                viewModel.turn(direction)
+                scroll.scrollTo(0)
+                slide.snapTo(direction * viewportPx)
+                slide.animateTo(0f, tween(SLIDE_IN_MS, easing = LinearOutSlowInEasing))
+                turning = false
+            }
+        }
+
+        // Pulling up past the end of the article, the way a webtoon reader pulls the next
+        // episode in: the landing zone at the bottom is the invitation, the overscroll is the
+        // answer. A finger has to travel a real distance so a bounce at the end does nothing.
+        val pull = remember { Pull() }
+        val pullConnection = remember(scroll) {
+            object : NestedScrollConnection {
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    if (source != NestedScrollSource.UserInput) return Offset.Zero
+                    if (available.y < 0f && !scroll.canScrollForward) {
+                        pull.px += -available.y
+                        if (pull.px > PULL_TO_TURN_PX && !turning && next != null) {
+                            pull.px = 0f
+                            turnWithSlide(1)
+                        }
+                    } else if (available.y > 0f && !scroll.canScrollBackward) {
+                        pull.px += -available.y
+                        if (pull.px < -PULL_TO_TURN_PX && !turning && previous != null) {
+                            pull.px = 0f
+                            turnWithSlide(-1)
+                        }
+                    } else {
+                        pull.px = 0f
+                    }
+                    return Offset.Zero
+                }
+
+                override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                    pull.px = 0f
+                    return Velocity.Zero
+                }
+            }
+        }
 
         // Only while there is actually something to see in colour. An article the feed gave no
         // picture for has nothing but white-on-black type on screen, and lifting the whole
@@ -920,8 +992,9 @@ class ReaderScreen(
         ChromeScrollEffect(scroll, chrome)
         WheelKeys()
         // Off the bottom and keep turning: the next article in this feed, here, in place. Off
-        // the top: the previous one. Three notches past the end, so an overshoot does nothing.
-        val wheelEdge = WheelScroll(scroll, onEdge = { direction -> viewModel.turn(direction) })
+        // the top: the previous one. One notch past the end is enough now that the landing
+        // zone under the article says what the turn will open.
+        val wheelEdge = WheelScroll(scroll, onEdge = { direction -> turnWithSlide(direction) }, edgeNotches = 1)
         LightTheme(colors = colors) {
             Column(
                 modifier = Modifier
@@ -963,7 +1036,9 @@ class ReaderScreen(
                     LightScrollView(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth(),
+                            .fillMaxWidth()
+                            .nestedScroll(pullConnection)
+                            .graphicsLayer { translationY = slide.value },
                         scrollState = scroll,
                     ) {
                         Column(
@@ -1027,6 +1102,17 @@ class ReaderScreen(
                                     add((if (article.isRead) "UNREAD" else "READ") to viewModel::toggleRead)
                                     add((if (article.isArchived) "RESTORE" else "ARCHIVE") to { viewModel.toggleArchived { goBack() } })
                                 },
+                            )
+
+                            // The landing zone. Past the actions the page keeps going into
+                            // what comes next — its title and a line of it — so the end of an
+                            // article is a doorway, not a wall. Pulling up here, or one more
+                            // notch of the wheel, turns the page.
+                            UpNext(
+                                next = next,
+                                feedTitle = row?.feedTitle.orEmpty(),
+                                minHeightPx = viewportPx * UP_NEXT_FRACTION,
+                                onOpen = { turnWithSlide(1) },
                             )
                         }
                     }
@@ -1369,6 +1455,95 @@ internal fun ArticleActions(actions: List<Pair<String, () -> Unit>>) {
         }
     }
 }
+
+/**
+ * What comes after this article, set at the foot of it so that scrolling on carries you into the
+ * next one. Sized to a good part of the screen: the point is that the reader arrives here with
+ * nothing else in view and reads the next title before deciding.
+ */
+@Composable
+internal fun UpNext(next: ArticleEntity?, feedTitle: String, minHeightPx: Float, onOpen: () -> Unit) {
+    val minHeight = with(LocalDensity.current) { minHeightPx.toDp() }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = minHeight)
+            .padding(top = 3f.gridUnitsAsDp()),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(LightThemeTokens.colors.contentSecondary.copy(alpha = 0.35f)),
+        )
+        if (next == null) {
+            LightText(
+                text = "END OF ${feedTitle.uppercase(Locale.US)}",
+                variant = LightTextVariant.Fine,
+                lighten = true,
+                modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
+            )
+            LightText(
+                text = "Nothing more here. Go back for the list.",
+                variant = LightTextVariant.Detail,
+                lighten = true,
+                modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
+            )
+            return@Column
+        }
+        LightText(
+            text = "UP NEXT",
+            variant = LightTextVariant.Fine,
+            lighten = true,
+            modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .lightClickable(onClickLabel = "Open ${next.title}", role = Role.Button) { onOpen() }
+                .padding(top = 1f.gridUnitsAsDp()),
+        ) {
+            LightText(
+                text = next.title,
+                variant = LightTextVariant.Subheading,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val teaser = next.summary.ifBlank { next.content }.let { ContentBlocks.decode(next.contentBlocks).firstTextOr(it) }
+            if (teaser.isNotBlank()) {
+                LightText(
+                    text = teaser,
+                    variant = LightTextVariant.Detail,
+                    lighten = true,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
+                )
+            }
+            LightText(
+                text = "Keep scrolling",
+                variant = LightTextVariant.Superfine,
+                lighten = true,
+                modifier = Modifier.padding(top = 1.25f.gridUnitsAsDp()),
+            )
+        }
+    }
+}
+
+private fun List<ContentBlock>.firstTextOr(fallback: String): String =
+    filterIsInstance<ContentBlock.Text>().firstOrNull()?.text ?: fallback
+
+/** Overscroll collected past the end of the article, in pixels; not Compose state on purpose. */
+private class Pull {
+    var px: Float = 0f
+}
+
+private const val SLIDE_OUT_MS = 160
+private const val SLIDE_IN_MS = 220
+/** How far a finger pulls past the end before the page turns. */
+private const val PULL_TO_TURN_PX = 220f
+/** The landing zone's share of the screen. */
+private const val UP_NEXT_FRACTION = 0.55f
 
 @Composable
 internal fun LoadingScreen(message: String, modifier: Modifier = Modifier) {

@@ -1,30 +1,21 @@
-# News 3.0.0
+# News 3.1.0
 
-**News is a daily briefing now.**
+**The briefing folds.** Each section shows its first three — three calendar entries, the top
+three stories of every category — with `SHOW 9 MORE STORIES` underneath, so a morning's page is
+a screen or two, not a scroll through a hundred and forty headlines. Sections fold back up when
+you leave the app. An entry that is already over is lightened, so the eye lands on what is still
+to come.
 
-Home has two tabs instead of three sources. **Daily Briefing** opens on the day — the date, the
-weather, what is on the calendar — and then Kagi's edition, a category at a time in Kagi's own
-ranking, each story with the number of sources it was drawn from. **Timeline** is everything you
-subscribed to — RSS feeds and Gmail newsletters — in one stream, newest first, cut into THIS
-MORNING / THIS AFTERNOON / THIS EVENING / YESTERDAY / the weekday / the date, with the source set
-small above each headline (`RSS · THE VERGE`, `BEN THOMPSON · STRATECHERY`) and the age at the
-right. The tab you were on is the tab the app opens to.
+**Spacing to the drawing.** The briefing's margins are 1.5 units both sides, the weather sits
+directly under the date, YOUR DAY follows at the mock's distance. Timeline rows are as tall as
+their headline needs — one line or two — instead of every row reserving two; the headline is
+measured ahead of layout so the scroll bar still knows where it is.
 
-**Your day comes from BrightNotebook.** The notebook owns the calendar — typed entries, imported
-feeds, repeating series, LightPass tickets, US holidays — and archives the weather overnight, so
-the briefing asks it rather than keeping a second copy. It needs BrightNotebook 1.61 or later;
-with an older notebook, or none, the briefing shows the date and "Nothing on the calendar." and
-never an error. Refresh re-reads the day.
+**Turning the page slides.** Running off the end of an article and turning on slides it out the
+way you were going and the next one in from the other side. Past the actions the page now keeps
+going into a landing zone — UP NEXT, the next headline, a line of it, "Keep scrolling" — the way a
+webtoon reader runs an episode into the next. From there, one more notch of the wheel, or pulling
+up past the end with a finger, turns the page; tapping the headline does too. At the end of a
+feed the zone says so.
 
-**A Kagi story knows its place.** The reader's bar reads `World · 1 of 12`, the byline reads
-`11 SOURCES · SEP 3, 2026 · 8:04 AM`, and turning past the end still goes to the next story in
-the category.
-
-**Sources.** The list button on the briefing opens Kagi categories; on the timeline it opens
-Subscriptions, which now has the Mailbox beside Saved, Archive and Settings, so both halves of
-the stream are one tap away. Search, Saved, Archive, Settings, the readers, the Kagi picker and
-Gmail sign-in are unchanged.
-
-Schema moves from 5 to 6 — one column, the source count on a Kagi story; stories already stored
-show no count until tomorrow's edition. Installs over 2.11.0 and keeps every subscription, label,
-read state and saved article.
+No schema change. Installs over 3.0.0 and keeps everything.

@@ -71,6 +71,18 @@ class HomeViewModel(
     private val _todayTick = MutableStateFlow(0)
     val todayTick: StateFlow<Int> = _todayTick.asStateFlow()
 
+    /**
+     * Sections opened past their first three. Session state, not persisted: the briefing is a
+     * page you read top to bottom once a day, and it should fold back up for tomorrow.
+     * `CALENDAR_SECTION` stands for YOUR DAY; every other key is a Kagi feed id.
+     */
+    private val _expanded = MutableStateFlow<Set<Long>>(emptySet())
+    val expanded: StateFlow<Set<Long>> = _expanded.asStateFlow()
+
+    fun toggleExpanded(section: Long) {
+        _expanded.update { if (section in it) it - section else it + section }
+    }
+
     /* ------------------------------------------------------------------ timeline */
 
     val timeline: StateFlow<List<Briefing.TimelineItem>> =
@@ -94,6 +106,8 @@ class HomeViewModel(
     override fun onAppPause() {
         super.onAppPause()
         jumpPending = true
+        // Tomorrow's briefing starts folded.
+        _expanded.value = emptySet()
     }
 
     val feedCount: StateFlow<Int> = repository.observeFeeds(Source.RSS)
@@ -143,6 +157,10 @@ class HomeViewModel(
         repository.close()
         database.close()
         super.onCleared()
+    }
+
+    companion object {
+        const val CALENDAR_SECTION = -1L
     }
 }
 

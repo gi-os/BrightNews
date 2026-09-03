@@ -17,6 +17,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,21 +48,25 @@ import java.util.Locale
 fun BriefingContent(
     today: NotebookDay?,
     edition: List<Briefing.CategoryStories>,
+    expanded: Set<Long>,
+    onToggle: (Long) -> Unit,
     onOpen: (ArticleRow) -> Unit,
     scroll: ScrollState,
     modifier: Modifier = Modifier,
 ) {
     val now = System.currentTimeMillis()
     val zone = ZoneId.systemDefault()
+    val nowMinute = java.time.Instant.ofEpochMilli(now).atZone(zone).let { it.hour * 60 + it.minute }
     WheelScroll(scroll)
     LightScrollView(
         modifier = modifier.fillMaxWidth(),
         scrollState = scroll,
     ) {
+        // The mock's 20 px at 360 wide is 1.5 units on both sides; the gutter is outside that.
         Column(
             modifier = Modifier.padding(
                 start = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
-                end = ROW_END_MARGIN_UNITS.gridUnitsAsDp(),
+                end = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
                 bottom = 3f.gridUnitsAsDp(),
             ),
         ) {
@@ -72,11 +80,10 @@ fun BriefingContent(
                     text = line,
                     variant = LightTextVariant.Detail,
                     lighten = true,
-                    modifier = Modifier.padding(top = 0.25f.gridUnitsAsDp()),
                 )
             }
 
-            SectionLabel("Your day", topUnits = 1f)
+            SectionLabel("Your day", topUnits = 1.05f)
             val entries = today?.entries.orEmpty()
             if (entries.isEmpty()) {
                 LightText(
@@ -86,7 +93,17 @@ fun BriefingContent(
                     modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
                 )
             } else {
-                entries.forEach { entry -> CalendarRow(entry) }
+                val calendarOpen = HomeViewModel.CALENDAR_SECTION in expanded
+                val shown = if (calendarOpen) entries else entries.take(TOP_N)
+                Column(modifier = Modifier.padding(top = 0.3f.gridUnitsAsDp())) {
+                    shown.forEach { entry -> CalendarRow(entry, past = !entry.allDay && entry.endMinute in 0 until nowMinute) }
+                }
+                MoreRow(
+                    hidden = entries.size - TOP_N,
+                    open = calendarOpen,
+                    noun = "MORE",
+                    onClick = { onToggle(HomeViewModel.CALENDAR_SECTION) },
+                )
             }
 
             if (edition.isEmpty()) {
@@ -106,10 +123,18 @@ fun BriefingContent(
                     topUnits = 1.35f,
                     trailing = "${category.stories.size} ${if (category.stories.size == 1) "STORY" else "STORIES"}",
                 )
-                category.stories.forEachIndexed { index, row ->
+                val open = category.feedId in expanded
+                val shown = if (open) category.stories else category.stories.take(TOP_N)
+                shown.forEachIndexed { index, row ->
                     if (index > 0) HairlineDivider()
                     StoryRow(rank = index + 1, row = row, onOpen = onOpen)
                 }
+                MoreRow(
+                    hidden = category.stories.size - TOP_N,
+                    open = open,
+                    noun = "MORE STORIES",
+                    onClick = { onToggle(category.feedId) },
+                )
             }
         }
     }
@@ -137,9 +162,33 @@ private fun SectionLabel(text: String, topUnits: Float, trailing: String? = null
     }
 }
 
-/** `9:30   Dentist` — time in a fixed column, all-day items with a dash. */
+/**
+ * `SHOW 9 MORE STORIES` / `SHOW FEWER` under a section cut to its first three. Nothing when
+ * the section was short enough to show whole.
+ */
 @Composable
-private fun CalendarRow(entry: NotebookEntry) {
+private fun MoreRow(hidden: Int, open: Boolean, noun: String, onClick: () -> Unit) {
+    if (hidden <= 0) return
+    Column {
+        HairlineDivider()
+        LightText(
+            text = if (open) "SHOW FEWER" else "SHOW $hidden $noun",
+            variant = LightTextVariant.Fine,
+            lighten = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .lightClickable(onClickLabel = if (open) "Show fewer" else "Show $hidden more", role = Role.Button) { onClick() }
+                .padding(vertical = 0.75f.gridUnitsAsDp()),
+        )
+    }
+}
+
+/**
+ * `9:30   Dentist` — time in a fixed column, all-day items with a dash. An entry already over
+ * is lightened, so the eye lands on what is still to come.
+ */
+@Composable
+private fun CalendarRow(entry: NotebookEntry, past: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -156,6 +205,7 @@ private fun CalendarRow(entry: NotebookEntry) {
         LightText(
             text = entry.title,
             variant = LightTextVariant.Paragraph,
+            lighten = past,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -237,12 +287,39 @@ fun TimelineList(
         EmptyState(emptyMessage, modifier)
         return
     }
-    val rowHeight = articleRowHeightGridUnits()
-    val heights = remember(items, rowHeight) {
+    // Rows are as tall as their headline needs — one line or two — the way the mock draws
+    // them, rather than every row reserving two lines. The scroll bar needs each height ahead
+    // of layout, so the headline is measured here with the same type the row will use; a
+    // couple of hundred measurements once per list change is nothing.
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val typography = LightThemeTokens.typography
+    val measurer = rememberTextMeasurer()
+    val unitPx = with(density) { 1f.gridUnitsAsDp().toPx() }
+    val heights = remember(items, unitPx, configuration.screenWidthDp, typography, imageStore != null) {
+        val textWidthPx = with(density) {
+            (configuration.screenWidthDp.dp.toPx() - (GUTTER_UNITS + SIDE_MARGIN_UNITS + ROW_END_MARGIN_UNITS) * unitPx)
+        }
+        val thumbPx = (THUMB_UNITS + 1f) * unitPx
+        val superfineLh = with(density) { typography.superfine.lineHeight.toPx() }
+        val paragraphLh = with(density) { typography.paragraph.lineHeight.toPx() }
         items.mapIndexed { index, item ->
             when (item) {
                 is Briefing.TimelineItem.Header -> if (index == 0) HEADER_FIRST_UNITS else HEADER_UNITS
-                is Briefing.TimelineItem.Story -> rowHeight
+                is Briefing.TimelineItem.Story -> {
+                    val hasThumb = imageStore != null && item.row.article.imageUrl.isNotBlank()
+                    val width = (textWidthPx - if (hasThumb) thumbPx else 0f).toInt().coerceAtLeast(1)
+                    val lines = measurer.measure(
+                        text = item.row.article.title,
+                        style = typography.paragraph,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        constraints = Constraints(maxWidth = width),
+                    ).lineCount.coerceIn(1, 2)
+                    val textPx = superfineLh + STORY_GAP_UNITS * unitPx + lines * paragraphLh
+                    val px = maxOf(textPx, if (hasThumb) THUMB_UNITS * unitPx else 0f) + 2 * STORY_PAD_UNITS * unitPx
+                    px / unitPx
+                }
             }
         }
     }
@@ -261,7 +338,7 @@ fun TimelineList(
                     row = item.row,
                     onOpen = onOpen,
                     imageStore = imageStore,
-                    heightGridUnits = rowHeight,
+                    heightGridUnits = heights[index],
                     // No rule between a header and its first story; the header is the break.
                     divider = index + 1 < items.size && items[index + 1] is Briefing.TimelineItem.Story,
                 )
@@ -308,8 +385,8 @@ private fun TimelineRow(
                 .padding(
                     start = SIDE_MARGIN_UNITS.gridUnitsAsDp(),
                     end = ROW_END_MARGIN_UNITS.gridUnitsAsDp(),
-                    top = 0.9f.gridUnitsAsDp(),
-                    bottom = 0.9f.gridUnitsAsDp(),
+                    top = STORY_PAD_UNITS.gridUnitsAsDp(),
+                    bottom = STORY_PAD_UNITS.gridUnitsAsDp(),
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -340,7 +417,7 @@ private fun TimelineRow(
                     lighten = article.isRead,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 0.4f.gridUnitsAsDp()),
+                    modifier = Modifier.padding(top = STORY_GAP_UNITS.gridUnitsAsDp()),
                 )
             }
             if (imageStore != null && article.imageUrl.isNotBlank()) {
@@ -356,5 +433,12 @@ private fun TimelineRow(
     }
 }
 
+private const val TOP_N = 3
 private const val HEADER_UNITS = 3f
+/** The mock's 12 px / 5 px at 360 wide, in units. */
+private const val STORY_PAD_UNITS = 0.9f
+private const val STORY_GAP_UNITS = 0.375f
+/** Must agree with `RssUi`'s thumbnail and the SDK's scroll-bar gutter. */
+private const val THUMB_UNITS = 3.6f
+private const val GUTTER_UNITS = 2f
 private const val HEADER_FIRST_UNITS = 2.4f
