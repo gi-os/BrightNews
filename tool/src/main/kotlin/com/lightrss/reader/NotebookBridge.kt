@@ -25,11 +25,13 @@ object NotebookBridge {
         val resolver = context.contentResolver // light-sdk-allow: the notebook's provider is the only source of the day
         val entries = runCatching {
             resolver.query(DAY_URI, null, null, null, null)?.use { cursor ->
-                val title = cursor.getColumnIndex("title")
-                val start = cursor.getColumnIndex("startMinute")
-                val end = cursor.getColumnIndex("endMinute")
-                val allDay = cursor.getColumnIndex("allDay")
-                val kind = cursor.getColumnIndex("kind")
+                // OrThrow: a missing column is an older notebook, and the runCatching above
+                // turns that into "no day", which is the right answer.
+                val title = cursor.getColumnIndexOrThrow("title")
+                val start = cursor.getColumnIndexOrThrow("startMinute")
+                val end = cursor.getColumnIndexOrThrow("endMinute")
+                val allDay = cursor.getColumnIndexOrThrow("allDay")
+                val kind = cursor.getColumnIndexOrThrow("kind")
                 buildList {
                     while (cursor.moveToNext()) {
                         add(
@@ -50,16 +52,16 @@ object NotebookBridge {
             resolver.query(WEATHER_URI, null, null, null, null)?.use { cursor ->
                 if (!cursor.moveToFirst()) return@use null
                 fun double(name: String): Double? {
-                    val index = cursor.getColumnIndex(name)
-                    return if (index < 0 || cursor.isNull(index)) null else cursor.getDouble(index)
+                    val index = cursor.getColumnIndexOrThrow(name)
+                    return if (cursor.isNull(index)) null else cursor.getDouble(index)
                 }
                 NotebookWeather(
-                    code = cursor.getInt(cursor.getColumnIndex("code")),
-                    kind = cursor.getString(cursor.getColumnIndex("kind")).orEmpty(),
+                    code = cursor.getInt(cursor.getColumnIndexOrThrow("code")),
+                    kind = cursor.getString(cursor.getColumnIndexOrThrow("kind")).orEmpty(),
                     maxC = double("maxC"),
                     minC = double("minC"),
-                    sunriseMinute = cursor.getInt(cursor.getColumnIndex("sunriseMinute")),
-                    sunsetMinute = cursor.getInt(cursor.getColumnIndex("sunsetMinute")),
+                    sunriseMinute = cursor.getInt(cursor.getColumnIndexOrThrow("sunriseMinute")),
+                    sunsetMinute = cursor.getInt(cursor.getColumnIndexOrThrow("sunsetMinute")),
                 )
             }
         }.getOrNull()
