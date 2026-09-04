@@ -1,22 +1,9 @@
-# News 3.2.0
+# News 3.3.0
 
-**The briefing says how old it is.** Under the bar: `EDITION 8:04 AM`, and `EDITION 8:04 AM ·
-REFRESHING…` while a newer one is on its way, instead of yesterday's page standing in for
-today's. Kagi publishes once a day around noon UTC, so a Kagi category last fetched before
-today's edition was due is refreshed the moment the app opens, whatever the fifteen-minute rule
-says about the other feeds.
+**A switch back to plain RSS.** Settings → **HOME** toggles between the daily briefing and a
+feed reader and nothing else. In RSS mode home is the timeline alone under an "RSS" bar — no
+tabs, saved and archive in the bottom bar beside refresh — and Kagi categories are left
+unfetched, so nothing is on the wire that is not on the screen. Flip it back and the briefing,
+the tabs and Kagi return exactly as they were; nothing is deleted either way.
 
-**Stories carry their topic.** `ANTITRUST · 11 SOURCES` under a headline — the one word that
-makes a dozen of them scannable.
-
-**The timeline is today's paper with yesterday underneath.** Buckets older than YESTERDAY fold
-to a header with a count (`MONDAY · 14 ▸`); tap to open one. They fold back when you leave the
-app.
-
-**`MORE` is quieter.** The fold under a section is a small right-aligned `MORE` in the same
-weight as a story's age, not a button-sized `SHOW 9 MORE STORIES` row.
-
-**The briefing tab is a sun now**, not Kagi's newspaper. The tab is the day; Kagi is one of the
-things in it.
-
-No schema change. Installs over 3.1.0 and keeps everything.
+No schema change. Installs over 3.2.0 and keeps everything.

@@ -34,9 +34,14 @@ class HomeViewModel(
     private val database: RssDatabase,
 ) : LightViewModel<Unit>() {
 
+    /** Plain RSS: the timeline alone, no briefing, no tabs. Settings → HOME. */
+    val rssOnly: StateFlow<Boolean> = repository.rssOnly
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     /** Which tab is showing. Persisted: the app opens where it was left, the briefing to begin with. */
-    val section: StateFlow<String> = repository.homeSection
-        .stateIn(viewModelScope, SharingStarted.Eagerly, HomeSection.BRIEFING)
+    val section: StateFlow<String> = combine(repository.homeSection, repository.rssOnly) { section, rssOnly ->
+        if (rssOnly) HomeSection.TIMELINE else section
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeSection.BRIEFING)
 
     fun showSection(next: String) {
         if (section.value == next) return
@@ -578,6 +583,13 @@ class SettingsViewModel(private val repository: RssRepository) : LightViewModel<
 
     val fullTextEnabled: StateFlow<Boolean> = repository.fullTextEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val rssOnly: StateFlow<Boolean> = repository.rssOnly
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setRssOnly(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) { repository.setRssOnly(enabled) }
+    }
 
     fun setFullTextEnabled(enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) { repository.setFullTextEnabled(enabled) }

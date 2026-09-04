@@ -4,6 +4,14 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.3.0 - 2026-09-03
+
+### Added
+
+- `rss_only` metadata flag (Settings → HOME). `HomeViewModel.section` collapses to TIMELINE while
+  it is set; the bar reads "RSS", the bottom bar is Saved / Refresh / Archive, and
+  `refreshAll` skips `Source.KAGI` feeds.
+
 ## 3.2.0 - 2026-09-03
 
 ### Changed

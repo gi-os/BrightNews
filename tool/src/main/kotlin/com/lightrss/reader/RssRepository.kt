@@ -339,6 +339,19 @@ class RssRepository(
         return (above + 1) to total
     }
 
+    /**
+     * Plain RSS, with the briefing switched off. Home is the timeline alone under an "RSS" bar,
+     * no tabs, and Kagi categories are left unfetched — for the reader who wanted the feed
+     * reader this started as, and nothing on top of it.
+     */
+    val rssOnly: Flow<Boolean> = dao.observeMetadata(RSS_ONLY_KEY)
+        .map { it == "1" }
+        .distinctUntilChanged()
+
+    suspend fun setRssOnly(enabled: Boolean) {
+        dao.putMetadata(AppMetadataEntity(RSS_ONLY_KEY, if (enabled) "1" else "0"))
+    }
+
     /** Which home tab was open last; the briefing until the reader says otherwise. */
     val homeSection: Flow<String> = dao.observeMetadata(HOME_SECTION_KEY)
         .map { it ?: HomeSection.BRIEFING }
@@ -670,7 +683,9 @@ class RssRepository(
     suspend fun refreshAll(force: Boolean = true) {
         if (!syncMutex.tryLock()) return
         try {
-            val feeds = dao.getFeeds()
+            val rssOnly = dao.getMetadata(RSS_ONLY_KEY) == "1"
+            // In plain-RSS mode Kagi is not on screen, so it is not on the wire either.
+            val feeds = dao.getFeeds().filter { !rssOnly || it.sourceType != Source.KAGI }
             val now = System.currentTimeMillis()
             // The fifteen-minute rule is for feeds. Kagi publishes once a day around noon UTC,
             // and a briefing opened at breakfast should not wait a quarter of an hour for it:
@@ -824,6 +839,7 @@ class RssRepository(
         private const val SHOW_IMAGES_KEY = "show_images"
         private const val FULL_TEXT_KEY = "full_text"
         private const val HOME_SECTION_KEY = "home_section"
+        private const val RSS_ONLY_KEY = "rss_only"
         private const val KAGI_INDEX_KEY = "kagi_index"
         private const val KAGI_INDEX_AT_KEY = "kagi_index_at"
         private const val KAGI_INDEX_AGE_MS = 24 * 60 * 60 * 1_000L

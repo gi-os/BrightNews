@@ -107,6 +107,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val section by viewModel.section.collectAsState()
+        val rssOnly by viewModel.rssOnly.collectAsState()
         val unreadOnly by viewModel.unreadOnly.collectAsState()
         val favoritesOnly by viewModel.favoritesOnly.collectAsState()
         val favoriteCount by viewModel.favoriteFeedCount.collectAsState()
@@ -170,7 +171,13 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                                 },
                                 contentDescription = if (briefing) "Kagi categories" else "Subscriptions",
                             ),
-                            center = LightTopBarCenter.Text(if (briefing) "Daily Briefing" else "Timeline"),
+                            center = LightTopBarCenter.Text(
+                                when {
+                                    briefing -> "Daily Briefing"
+                                    rssOnly -> "RSS"
+                                    else -> "Timeline"
+                                },
+                            ),
                             rightButton = LightBarButton.LightIcon(
                                 icon = LightIcons.SEARCH,
                                 onClick = { navigateTo({ SearchScreen(it, repository) }) },
@@ -215,24 +222,44 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                 }
                 ReaderChrome(chrome.visible) {
                     LightBottomBar(
-                        items = listOf(
-                            SectionTab(
-                                iconRes = R.drawable.ic_day_white,
-                                label = "Daily Briefing",
-                                selected = briefing,
-                                onClick = { viewModel.showSection(HomeSection.BRIEFING) },
-                            ),
-                            SectionTab(
-                                iconRes = R.drawable.ic_rss_white,
-                                label = "Timeline",
-                                selected = !briefing,
-                                onClick = { viewModel.showSection(HomeSection.TIMELINE) },
-                            ),
-                            LightBarButton.LightIcon(
-                                icon = LightIcons.REFRESH,
-                                onClick = viewModel::refresh,
-                            ),
-                        ),
+                        items = if (rssOnly) {
+                            // No tabs to switch between: saved, refresh, archive.
+                            listOf(
+                                LightBarButton.LightIcon(
+                                    icon = LightIcons.STAR_OUTLINE,
+                                    onClick = { navigateTo({ SavedScreen(it, repository) }) },
+                                    contentDescription = "Saved articles",
+                                ),
+                                LightBarButton.LightIcon(
+                                    icon = LightIcons.REFRESH,
+                                    onClick = viewModel::refresh,
+                                ),
+                                LightBarButton.LightIcon(
+                                    icon = LightIcons.DELETE,
+                                    onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
+                                    contentDescription = "Archive",
+                                ),
+                            )
+                        } else {
+                            listOf(
+                                SectionTab(
+                                    iconRes = R.drawable.ic_day_white,
+                                    label = "Daily Briefing",
+                                    selected = briefing,
+                                    onClick = { viewModel.showSection(HomeSection.BRIEFING) },
+                                ),
+                                SectionTab(
+                                    iconRes = R.drawable.ic_rss_white,
+                                    label = "Timeline",
+                                    selected = !briefing,
+                                    onClick = { viewModel.showSection(HomeSection.TIMELINE) },
+                                ),
+                                LightBarButton.LightIcon(
+                                    icon = LightIcons.REFRESH,
+                                    onClick = viewModel::refresh,
+                                ),
+                            )
+                        },
                     )
                 }
             }
@@ -1257,6 +1284,7 @@ class SettingsScreen(
         val colors by LightThemeController.colors.collectAsState()
         val imagesEnabled by viewModel.imagesEnabled.collectAsState()
         val fullTextEnabled by viewModel.fullTextEnabled.collectAsState()
+        val rssOnly by viewModel.rssOnly.collectAsState()
         val colourEnabled by viewModel.colourEnabled.collectAsState()
         val scroll = rememberScrollState()
 
@@ -1281,6 +1309,16 @@ class SettingsScreen(
                     }
                     SettingsRow("MAILBOX", "Gmail account, labels and newsletter rendering") {
                         navigateTo({ MailboxScreen(it, repository) })
+                    }
+                    SettingsRow(
+                        title = if (rssOnly) "HOME: RSS ONLY" else "HOME: DAILY BRIEFING",
+                        detail = if (rssOnly) {
+                            "Just your feeds and newsletters — tap for the briefing and Kagi News"
+                        } else {
+                            "Briefing and timeline tabs — tap for a plain feed reader"
+                        },
+                    ) {
+                        viewModel.setRssOnly(!rssOnly)
                     }
                     SettingsRow(
                         title = if (fullTextEnabled) "FULL ARTICLES ON" else "FULL ARTICLES OFF",
