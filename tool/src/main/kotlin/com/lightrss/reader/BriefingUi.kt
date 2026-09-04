@@ -119,11 +119,7 @@ fun BriefingContent(
                 }
             }
             edition.forEach { category ->
-                SectionLabel(
-                    text = category.title,
-                    topUnits = 1.35f,
-                    trailing = "${category.stories.size} ${if (category.stories.size == 1) "STORY" else "STORIES"}",
-                )
+                SectionLabel(text = category.title, topUnits = 1.35f)
                 val open = category.feedId in expanded
                 val shown = if (open) category.stories else category.stories.take(TOP_N)
                 shown.forEachIndexed { index, row ->

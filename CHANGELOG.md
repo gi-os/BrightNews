@@ -4,6 +4,12 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.4.1 - 2026-09-04
+
+### Changed
+
+- Briefing category labels drop the trailing `n STORIES`.
+
 ## 3.4.0 - 2026-09-04
 
 ### Added
