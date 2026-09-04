@@ -62,20 +62,20 @@ object Briefing {
         zone: ZoneId,
         opened: Set<String> = emptySet(),
     ): List<TimelineItem> {
-        val out = ArrayList<TimelineItem>(rows.size + 8)
-        val counts = HashMap<String, Int>()
-        for (row in rows) counts.merge(bucket(row.article.publishedAt, now, zone), 1, Int::plus)
-        var last: String? = null
-        var folded = false
+        // Grouped by label, in order of first appearance, rather than cut wherever the label
+        // changes. The two are the same for well-behaved feeds; they differ the moment a feed
+        // stamps an article in the future (a timezone slip is enough), which used to put a
+        // second THIS MORNING under THIS AFTERNOON — and a lazy list throws on the repeated key.
+        val groups = LinkedHashMap<String, MutableList<ArticleRow>>()
         for (row in rows) {
-            val label = bucket(row.article.publishedAt, now, zone)
-            if (label != last) {
-                val foldable = isFoldable(label)
-                folded = foldable && label !in opened
-                out.add(TimelineItem.Header(label, count = if (foldable) counts.getValue(label) else 0, folded = folded))
-                last = label
-            }
-            if (!folded) out.add(TimelineItem.Story(row))
+            groups.getOrPut(bucket(row.article.publishedAt, now, zone)) { ArrayList() }.add(row)
+        }
+        val out = ArrayList<TimelineItem>(rows.size + groups.size)
+        for ((label, stories) in groups) {
+            val foldable = isFoldable(label)
+            val folded = foldable && label !in opened
+            out.add(TimelineItem.Header(label, count = if (foldable) stories.size else 0, folded = folded))
+            if (!folded) stories.forEach { out.add(TimelineItem.Story(it)) }
         }
         return out
     }
@@ -101,12 +101,14 @@ object Briefing {
         article.author.substringBefore(" · ").trim()
 
     fun bucket(publishedAt: Long, now: Long, zone: ZoneId): String {
+        // A stamp from the future is a feed's clock being wrong, not news from tomorrow.
+        val at = minOf(publishedAt, now)
         val today = journalDay(now, zone)
-        val day = journalDay(publishedAt, zone)
+        val day = journalDay(at, zone)
         val daysAgo = today.toEpochDay() - day.toEpochDay()
         return when {
             daysAgo <= 0 -> {
-                val hour = Instant.ofEpochMilli(publishedAt).atZone(zone).hour
+                val hour = Instant.ofEpochMilli(at).atZone(zone).hour
                 when {
                     hour in CUTOVER_HOUR until 12 -> "THIS MORNING"
                     hour in 12 until 17 -> "THIS AFTERNOON"

@@ -23,14 +23,16 @@ class BriefingTest {
 
     @Test
     fun `buckets follow the four o clock journal day`() {
-        assertEquals("THIS MORNING", Briefing.bucket(at(8), now, zone))
-        assertEquals("THIS AFTERNOON", Briefing.bucket(at(13), now, zone))
-        assertEquals("THIS EVENING", Briefing.bucket(at(19), now, zone))
+        // Two in the morning on the 4th is still the journal day of the 3rd.
+        val lateNow = at(2, dayOffset = 1)
+        assertEquals("THIS MORNING", Briefing.bucket(at(8), lateNow, zone))
+        assertEquals("THIS AFTERNOON", Briefing.bucket(at(13), lateNow, zone))
+        assertEquals("THIS EVENING", Briefing.bucket(at(19), lateNow, zone))
         // One in the morning belongs to the evening before, not to a morning nobody saw.
-        assertEquals("THIS EVENING", Briefing.bucket(at(1, dayOffset = 1), now, zone))
-        assertEquals("YESTERDAY", Briefing.bucket(at(9, dayOffset = -1), now, zone))
-        assertEquals("MONDAY", Briefing.bucket(at(9, dayOffset = -3), now, zone))
-        assertEquals("AUG 20", Briefing.bucket(at(9, dayOffset = -14), now, zone))
+        assertEquals("THIS EVENING", Briefing.bucket(at(1, dayOffset = 1), lateNow, zone))
+        assertEquals("YESTERDAY", Briefing.bucket(at(9, dayOffset = -1), lateNow, zone))
+        assertEquals("MONDAY", Briefing.bucket(at(9, dayOffset = -3), lateNow, zone))
+        assertEquals("AUG 20", Briefing.bucket(at(9, dayOffset = -14), lateNow, zone))
     }
 
     @Test
@@ -48,6 +50,21 @@ class BriefingTest {
             }
         }
         assertEquals(listOf("#THIS AFTERNOON", "a", "#THIS MORNING", "b", "c", "#YESTERDAY", "d"), labels)
+    }
+
+    @Test
+    fun `a future-dated article cannot produce a second header for the same bucket`() {
+        val rows = listOf(
+            row("future", 1, "AP", at(9, dayOffset = 1)),
+            row("a", 1, "AP", at(14)),
+            row("b", 1, "AP", at(9)),
+        )
+        val items = Briefing.timeline(rows, now, zone)
+        val keys = items.map { it.key }
+        assertEquals(keys.size, keys.toSet().size, "duplicate lazy-list keys: $keys")
+        assertEquals(listOf("THIS AFTERNOON", "THIS MORNING"), items.filterIsInstance<Briefing.TimelineItem.Header>().map { it.label })
+        // The future stamp is treated as now, so it leads the current bucket.
+        assertEquals("future", (items[1] as Briefing.TimelineItem.Story).row.article.id)
     }
 
     @Test

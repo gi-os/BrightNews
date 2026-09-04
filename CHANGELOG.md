@@ -4,6 +4,15 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.3.1 - 2026-09-04
+
+### Fixed
+
+- Launch crash with the timeline tab remembered: `Briefing.timeline` emitted a second header for
+  a bucket when a future-dated article broke the newest-first monotonicity, and the lazy list
+  threw on the duplicate key. `bucket()` clamps `publishedAt` to `now`; `timeline()` groups by
+  label (first-appearance order) instead of cutting on label change.
+
 ## 3.3.0 - 2026-09-03
 
 ### Added

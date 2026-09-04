@@ -5,7 +5,7 @@
 A daily briefing for the Light Phone III: today from BrightNotebook, then Kagi News a category
 at a time; and a timeline of every RSS feed and Gmail newsletter you follow, read in one reader. Built on the
 Light SDK; tool id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and
-search stay on the phone. Current release: **v3.3.0** (`tool/lighttool.toml`: versionCode 36).
+search stay on the phone. Current release: **v3.3.1** (`tool/lighttool.toml`: versionCode 37).
 
 ## Install via BrightMarket
 
@@ -294,6 +294,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v3.3.1  | —         | Launch crash with the timeline open: a future-dated article produced a duplicate bucket header |
 | v3.3.0  | —         | Settings → HOME switches between the daily briefing and a plain RSS reader |
 | v3.2.0  | —         | Edition time under the bar and a morning refresh; topics on story rows; older timeline buckets fold to a count; a sun for the briefing tab |
 | v3.1.0  | —         | Briefing sections fold to three with SHOW MORE; natural-height timeline rows; the reader slides between articles and runs into an UP NEXT landing zone |
