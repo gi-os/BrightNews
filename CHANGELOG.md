@@ -9,6 +9,8 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 ### Changed
 
 - Briefing category labels drop the trailing `n STORIES`.
+- `ContentBlocksBody`: a heading followed by links folds them until tapped (`▸`/`▾`); state is
+  per body, so a story opens folded every time.
 
 ## 3.4.0 - 2026-09-04
 

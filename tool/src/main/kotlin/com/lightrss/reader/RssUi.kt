@@ -16,7 +16,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -321,6 +323,24 @@ fun ContentBlocksBody(
     modifier: Modifier = Modifier,
     onLink: ((ContentBlock.Link) -> Unit)? = null,
 ) {
+    // A run of links under a heading is a source list, and a dozen of them is proof, not
+    // reading: it starts folded to its heading and opens on a tap. Folded state is per body.
+    val linkHeadings = remember(blocks) {
+        blocks.indices.filter { i ->
+            blocks[i] is ContentBlock.Heading && i + 1 < blocks.size && blocks[i + 1] is ContentBlock.Link
+        }.toSet()
+    }
+    var openHeadings by remember(blocks) { mutableStateOf(emptySet<Int>()) }
+    // The heading a link belongs to: the nearest heading above it.
+    fun headingOf(index: Int): Int? {
+        var i = index - 1
+        while (i >= 0) {
+            if (blocks[i] is ContentBlock.Heading) return i
+            i--
+        }
+        return null
+    }
+
     Column(modifier = modifier) {
         blocks.forEachIndexed { index, block ->
             // A block straight under its section heading sits close to it; everything else
@@ -333,23 +353,55 @@ fun ContentBlocksBody(
                     variant = LightTextVariant.Paragraph,
                     modifier = Modifier.padding(top = gap.gridUnitsAsDp()),
                 )
-                is ContentBlock.Heading -> Column(modifier = Modifier.padding(top = SECTION_GAP_UNITS.gridUnitsAsDp())) {
-                    // A rule over the label, so a section reads as a section and not as a
-                    // small grey word that happened to land between two paragraphs.
-                    Box(
+                is ContentBlock.Heading -> {
+                    val foldable = index in linkHeadings
+                    val open = index in openHeadings
+                    val toggle = if (foldable) {
+                        Modifier.lightClickable(
+                            onClickLabel = if (open) "Fold ${block.text}" else "Open ${block.text}",
+                            role = Role.Button,
+                        ) { openHeadings = if (open) openHeadings - index else openHeadings + index }
+                    } else {
+                        Modifier
+                    }
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(1.dp)
-                            .background(LightThemeTokens.colors.contentSecondary.copy(alpha = 0.35f)),
-                    )
-                    LightText(
-                        text = block.text.uppercase(Locale.US),
-                        variant = LightTextVariant.Fine,
-                        lighten = true,
-                        modifier = Modifier.padding(top = 0.6f.gridUnitsAsDp()),
-                    )
+                            .padding(top = SECTION_GAP_UNITS.gridUnitsAsDp())
+                            .then(toggle),
+                    ) {
+                        // A rule over the label, so a section reads as a section and not as a
+                        // small grey word that happened to land between two paragraphs.
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(LightThemeTokens.colors.contentSecondary.copy(alpha = 0.35f)),
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 0.6f.gridUnitsAsDp(), bottom = if (foldable && !open) 0.6f.gridUnitsAsDp() else 0.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            LightText(
+                                text = block.text.uppercase(Locale.US),
+                                variant = LightTextVariant.Fine,
+                                lighten = true,
+                            )
+                            if (foldable) {
+                                LightText(
+                                    text = if (open) "▾" else "▸",
+                                    variant = LightTextVariant.Fine,
+                                    lighten = true,
+                                )
+                            }
+                        }
+                    }
                 }
-                is ContentBlock.Link -> {
+                is ContentBlock.Link -> if (headingOf(index)?.let { it in linkHeadings && it !in openHeadings } == true) {
+                    // Folded under its heading.
+                } else {
                     val clickable = if (onLink != null) {
                         Modifier.lightClickable(onClickLabel = "Open ${block.text}", role = Role.Button) {
                             onLink(block)
