@@ -45,6 +45,12 @@ android {
         minSdk = rootProject.ext["minSdk"] as Int
         targetSdk = rootProject.ext["targetSdk"] as Int
 
+        // Crash reports file themselves to light-reports, as the other Bright* apps do. The
+        // token is issues:write on that one repo and ships inside a sideloadable APK, so it is
+        // public by construction; blank in a local build, and the report screen then only shows.
+        buildConfigField("String", "REPORT_TOKEN", "\"${System.getenv("REPORT_TOKEN") ?: ""}\"")
+        buildConfigField("String", "REPORT_REPO", "\"gi-os/light-reports\"")
+
         manifestPlaceholders["sdkVersion"] = property("sdkVersion") as String
     }
 

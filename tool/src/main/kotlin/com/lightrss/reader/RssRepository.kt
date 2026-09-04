@@ -573,6 +573,30 @@ class RssRepository(
         return feedId
     }
 
+    /**
+     * The order the briefing lists categories in: most read first, decided once a day.
+     *
+     * Reads are counted over whatever Kagi stories are still in the database (a week), so the
+     * order follows what you actually open rather than the order you followed things in. It is
+     * recomputed only when the day changes, so the page does not reshuffle under you between
+     * breakfast and lunch because you happened to read Tech first today.
+     */
+    suspend fun kagiOrder(): List<Long> {
+        val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault()).toEpochDay()
+        val storedDay = dao.getMetadata(KAGI_ORDER_DAY_KEY)?.toLongOrNull()
+        val stored = dao.getMetadata(KAGI_ORDER_KEY)?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty()
+        val feeds = dao.getKagiFeeds()
+        if (storedDay == today && stored.isNotEmpty()) {
+            // Newly followed categories join at the end until tomorrow's count.
+            return stored.filter { id -> feeds.any { it.id == id } } + feeds.map { it.id }.filter { it !in stored }
+        }
+        val reads = dao.kagiReadCounts().associate { it.feedId to it.reads }
+        val order = feeds.sortedWith(compareByDescending<FeedEntity> { reads[it.id] ?: 0 }.thenBy { it.addedAt }.thenBy { it.id }).map { it.id }
+        dao.putMetadata(AppMetadataEntity(KAGI_ORDER_KEY, order.joinToString(",")))
+        dao.putMetadata(AppMetadataEntity(KAGI_ORDER_DAY_KEY, today.toString()))
+        return order
+    }
+
     /** The Kagi category after [feedId] in reading order, wrapping round; null when it is alone. */
     suspend fun nextKagiFeed(feedId: Long): FeedEntity? {
         val feeds = dao.getKagiFeeds()
@@ -612,6 +636,11 @@ class RssRepository(
                     }
                     .map { cluster -> kagiUpsert(feed.id, edition, cluster) }
                 dao.storeArticles(upserts)
+                // Today's dozen is the briefing; yesterday's moves to the archive, and a week
+                // on it is gone unless it was saved.
+                if (upserts.isNotEmpty()) {
+                    dao.archiveKagiBefore(feed.id, before = edition.publishedAt - KAGI_EDITION_WINDOW_MS)
+                }
                 dao.trimKagi(feed.id, before = System.currentTimeMillis() - KAGI_KEEP_MS)
             }
         }
@@ -842,6 +871,10 @@ class RssRepository(
         private const val RSS_ONLY_KEY = "rss_only"
         private const val KAGI_INDEX_KEY = "kagi_index"
         private const val KAGI_INDEX_AT_KEY = "kagi_index_at"
+        private const val KAGI_ORDER_KEY = "kagi_order"
+        private const val KAGI_ORDER_DAY_KEY = "kagi_order_day"
+        /** Stories more than this much older than the edition being stored belong to a past edition. */
+        private const val KAGI_EDITION_WINDOW_MS = 20 * 60 * 60 * 1_000L
         private const val KAGI_INDEX_AGE_MS = 24 * 60 * 60 * 1_000L
         /** Kagi's edition lands a little after 12:00 UTC; observed 12:03Z. */
         private const val KAGI_EDITION_HOUR_UTC = 12

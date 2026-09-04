@@ -109,6 +109,17 @@ class BriefingTest {
     }
 
     @Test
+    fun `the edition follows the most-read order and caps a category at a dozen`() {
+        val rows = (1..15).map { row("w$it", 10, "World", 1000L - it) } +
+            listOf(row("t1", 11, "Technology", 300), row("s1", 12, "Sports", 300))
+        val edition = Briefing.edition(rows, order = listOf(11L, 10L))
+        // Ordered categories first, then the rest as they came.
+        assertEquals(listOf("Technology", "World", "Sports"), edition.map { it.title })
+        assertEquals(Briefing.EDITION_SIZE, edition[1].stories.size)
+        assertEquals("w1", edition[1].stories.first().article.id)
+    }
+
+    @Test
     fun `source lines name the kind for feeds and the sender for newsletters`() {
         assertEquals("RSS · THE VERGE", Briefing.sourceLine(row("a", 1, "The Verge", now, author = "Nilay")))
         assertEquals("BEN THOMPSON · STRATECHERY", Briefing.sourceLine(row("gmail:1", 2, "Stratechery", now, author = "Ben Thompson")))

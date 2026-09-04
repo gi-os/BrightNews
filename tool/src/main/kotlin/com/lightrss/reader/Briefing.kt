@@ -18,20 +18,26 @@ object Briefing {
     /** One followed Kagi category and its stories, in Kagi's ranking. */
     data class CategoryStories(val feedId: Long, val title: String, val stories: List<ArticleRow>)
 
-    /** Rows arrive ordered by feed then rank; this only cuts them at the feed boundaries. */
-    fun edition(rows: List<ArticleRow>): List<CategoryStories> {
-        val out = ArrayList<CategoryStories>()
-        var current: MutableList<ArticleRow>? = null
+    /**
+     * Rows arrive ordered by feed then rank. Cut at the feed boundaries, capped at an edition's
+     * dozen per category, and put in [order] — most read first — with anything not in the order
+     * after it, as it came.
+     */
+    fun edition(rows: List<ArticleRow>, order: List<Long> = emptyList()): List<CategoryStories> {
+        val groups = LinkedHashMap<Long, MutableList<ArticleRow>>()
+        val titles = HashMap<Long, String>()
         for (row in rows) {
-            val last = out.lastOrNull()
-            if (last == null || last.feedId != row.article.feedId) {
-                current = ArrayList()
-                out.add(CategoryStories(row.article.feedId, row.feedTitle, current))
-            }
-            current!!.add(row)
+            groups.getOrPut(row.article.feedId) { ArrayList() }.add(row)
+            titles.putIfAbsent(row.article.feedId, row.feedTitle)
         }
-        return out
+        val rank = order.withIndex().associate { (index, id) -> id to index }
+        return groups.keys
+            .sortedBy { rank[it] ?: (order.size + groups.keys.indexOf(it)) }
+            .map { id -> CategoryStories(id, titles.getValue(id), groups.getValue(id).take(EDITION_SIZE)) }
     }
+
+    /** Kagi's edition is a dozen stories a category; more than that is a republish's leftovers. */
+    const val EDITION_SIZE = 12
 
     /** One line of the timeline: a bucket label, or a story. */
     sealed interface TimelineItem {

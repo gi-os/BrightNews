@@ -52,12 +52,14 @@ fun BriefingContent(
     onToggle: (Long) -> Unit,
     onOpen: (ArticleRow) -> Unit,
     scroll: ScrollState,
+    onTopEdge: ((Int) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val now = System.currentTimeMillis()
     val zone = ZoneId.systemDefault()
     val nowMinute = java.time.Instant.ofEpochMilli(now).atZone(zone).let { it.hour * 60 + it.minute }
-    WheelScroll(scroll)
+    // Two notches up past the top is a refresh; the bottom edge does nothing here.
+    WheelScroll(scroll, onEdge = onTopEdge, edgeNotches = 2)
     LightScrollView(
         modifier = modifier.fillMaxWidth(),
         scrollState = scroll,
@@ -287,6 +289,7 @@ fun TimelineList(
     emptyMessage: String,
     onOpen: (ArticleRow) -> Unit,
     onToggleBucket: (String) -> Unit,
+    onTopEdge: ((Int) -> Unit)? = null,
     modifier: Modifier = Modifier,
     imageStore: ArticleImageStore? = null,
     listState: LazyListState = rememberLazyListState(),
@@ -335,7 +338,7 @@ fun TimelineList(
             }
         }
     }
-    WheelScroll(listState)
+    WheelScroll(listState, onEdge = onTopEdge, edgeNotches = 2)
     LightLazyScrollView(
         modifier = modifier,
         listState = listState,

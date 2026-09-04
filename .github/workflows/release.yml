@@ -56,6 +56,7 @@ jobs:
         env:
           GH_PACKAGES_USER: ${{ secrets.GH_PACKAGES_USER }}
           GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+          REPORT_TOKEN: ${{ secrets.REPORT_TOKEN }}
         run: ./gradlew :tool:testDebugUnitTest :tool:lintDebug --stacktrace
 
       - name: Restore signing keystore
@@ -73,6 +74,7 @@ jobs:
         env:
           GH_PACKAGES_USER: ${{ secrets.GH_PACKAGES_USER }}
           GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+          REPORT_TOKEN: ${{ secrets.REPORT_TOKEN }}
           LIGHTRSS_KEYSTORE_FILE: ${{ runner.temp }}/lightrss-release.jks
           LIGHTRSS_KEYSTORE_PASSWORD: ${{ secrets.LIGHTRSS_KEYSTORE_PASSWORD }}
           LIGHTRSS_KEY_ALIAS: ${{ secrets.LIGHTRSS_KEY_ALIAS }}

@@ -175,6 +175,9 @@ data class ArticleRow(
     val feedTitle: String,
 )
 
+/** Reads per feed, for ranking Kagi categories by attention. */
+data class FeedReads(val feedId: Long, val reads: Int)
+
 data class FeedRow(
     @Embedded val feed: FeedEntity,
     val unreadCount: Int,
@@ -805,6 +808,30 @@ interface RssDao {
         """,
     )
     fun observeTimelineUnread(): Flow<Int>
+
+    /**
+     * Yesterday's edition goes to the archive when today's lands. The briefing is today's
+     * dozen; an older story is still there for search, saved items and the archive screen, and
+     * a saved one is never touched.
+     */
+    @Query(
+        """
+        UPDATE articles SET isArchived = 1
+        WHERE feedId = :feedId AND isArchived = 0 AND isStarred = 0 AND publishedAt < :before
+        """,
+    )
+    suspend fun archiveKagiBefore(feedId: Long, before: Long)
+
+    /** How many stories of each Kagi category have been opened — the order the briefing reads in. */
+    @Query(
+        """
+        SELECT a.feedId AS feedId, COUNT(*) AS reads
+        FROM articles a JOIN feeds f ON f.id = a.feedId
+        WHERE f.sourceType = 'KAGI' AND a.isRead = 1
+        GROUP BY a.feedId
+        """,
+    )
+    suspend fun kagiReadCounts(): List<FeedReads>
 
     /* ------------------------------------------------------------------ Kagi */
 

@@ -1,5 +1,7 @@
 package com.lightrss.reader
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.lifecycle.viewModelScope
 import com.thelightphone.sdk.LightViewModel
 import com.thelightphone.sdk.SimpleLightScreen
@@ -59,9 +61,20 @@ class HomeViewModel(
 
     /* ------------------------------------------------------------------ briefing */
 
-    /** Kagi's edition, a category at a time, in the order the categories were followed. */
+    /**
+     * The scroll positions, owned here rather than by the composition: the screen's composable
+     * leaves composition while a reader is on top of it, and a `remember` would come back at
+     * the top. Coming back from an article should land you where you left.
+     */
+    val briefingScroll = ScrollState(0)
+    val timelineList = LazyListState()
+
+    /** Categories most read first, decided once a day; see [RssRepository.kagiOrder]. */
+    private val _kagiOrder = MutableStateFlow<List<Long>>(emptyList())
+
+    /** Kagi's edition, a category at a time, most-read category first. */
     val edition: StateFlow<List<Briefing.CategoryStories>> = repository.observeKagiEdition()
-        .map { Briefing.edition(it) }
+        .combine(_kagiOrder) { rows, order -> Briefing.edition(rows, order) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /**
@@ -158,14 +171,18 @@ class HomeViewModel(
             _jumpToNewest.update { it + 1 }
         }
         _todayTick.update { it + 1 }
-        if (initialized) {
-            viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = false) }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { _kagiOrder.value = repository.kagiOrder() }
+            if (initialized) repository.refreshAll(force = false)
         }
     }
 
     fun refresh() {
         _todayTick.update { it + 1 }
-        viewModelScope.launch(Dispatchers.IO) { repository.refreshAll(force = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { _kagiOrder.value = repository.kagiOrder() }
+            repository.refreshAll(force = true)
+        }
     }
 
     /**

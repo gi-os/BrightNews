@@ -4,6 +4,27 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.4.0 - 2026-09-04
+
+### Added
+
+- `CrashLog` (uncaught handler → `filesDir/last-crash.txt`, installed in
+  `HomeScreen.createViewModel`) and `CrashScreen`, which posts the trace to
+  `gi-os/light-reports` with `BuildConfig.REPORT_TOKEN` (from the `REPORT_TOKEN` secret; blank
+  locally) and shows it until dismissed.
+- `archiveKagiBefore`: stories older than the stored edition by 20 h are archived on refresh.
+  `kagiReadCounts` + `RssRepository.kagiOrder()` (persisted `kagi_order`/`kagi_order_day`,
+  recomputed when the day changes); `Briefing.edition(rows, order)` applies it and caps at
+  `EDITION_SIZE` 12.
+
+### Changed
+
+- Home has no `LightTopBar`. Bottom bar: Briefing, Timeline, Sources, Search, Settings (RSS-only:
+  Sources, Saved, Search, Settings). Refresh via a `NestedScrollConnection` pull past the top
+  (160 px) or two wheel notches past the top (`onTopEdge`).
+- `HomeViewModel` owns `briefingScroll: ScrollState` and `timelineList: LazyListState`, so the
+  position survives the reader.
+
 ## 3.3.1 - 2026-09-04
 
 ### Fixed

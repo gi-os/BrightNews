@@ -1,16 +1,24 @@
-# News 3.3.1
+# News 3.4.0
 
-**Fixes a crash on launch with the timeline open.**
+**If News closes itself, the next launch says why.** A crash is written to a file as the process
+dies; the next launch opens on the trace, sends it to gi-os/light-reports the way the other
+Bright* apps do, and keeps it on screen until dismissed so it can be read off the phone even
+with no network. This is what was missing while the launch crash was being chased blind.
 
-A feed that stamps an article a little in the future — a timezone slip on the publisher's side
-is enough — put that article in THIS MORNING while later items sat in THIS AFTERNOON, so the
-timeline carried two THIS MORNING headers. The list keys its rows on the header label, and a
-repeated key throws the moment the list is laid out. With the timeline as the remembered tab,
-that was every launch.
+**No header.** Home has no bar at the top any more: the date is the briefing's title and the
+first bucket the timeline's. Everything that lived up there is in the bottom bar — the two tabs,
+sources (Kagi categories on the briefing, Subscriptions on the timeline), search, and settings
+behind a gear. Refresh is a gesture: pull down past the top, or turn the wheel up past it.
 
-Two fixes, either of which alone would do. A stamp from the future is now read as "now" — it is a
-clock being wrong, not news from tomorrow — so the buckets stay in order. And the timeline is
-built by grouping stories under each label rather than cutting wherever the label changes, so a
-label can only ever appear once whatever the stamps say.
+**Today's dozen, and only today's.** When a new Kagi edition lands, the previous one moves to
+the archive — still there for search, saved items and the Archive screen, never on the briefing.
+A category shows at most twelve.
 
-No schema change. Installs over 3.3.0 and keeps everything.
+**Categories in the order you read them.** The briefing sorts categories by how many of their
+stories you have opened, decided once a day in the morning so the page does not reshuffle under
+you between breakfast and lunch. A newly followed category joins at the end until tomorrow.
+
+**Back where you were.** Coming back from an article lands on the same spot in the briefing or
+the timeline; the position used to reset to the top.
+
+No schema change. Installs over 3.3.1 and keeps everything.

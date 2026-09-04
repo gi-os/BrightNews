@@ -85,6 +85,8 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
     override val viewModelClass: Class<HomeViewModel> = HomeViewModel::class.java
 
     override fun createViewModel(): HomeViewModel {
+        // Before anything else can fail: the next launch shows whatever this one dies of.
+        CrashLog.install(lightContext.filesDir)
         val database = lightContext.buildDatabase(
             RssDatabase::class.java,
             // The file keeps its name across the rename. Pointing at a new one would silently
@@ -124,11 +126,22 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         val jumpToNewest by viewModel.jumpToNewest.collectAsState()
         val repository = viewModel.repository
         val imageStore = rememberImageStore(repository)
-        val listState = rememberLazyListState()
-        val briefingScroll = rememberScrollState()
+        // Owned by the view model, so coming back from an article lands where you left.
+        val listState = viewModel.timelineList
+        val briefingScroll = viewModel.briefingScroll
         val chrome = rememberChromeVisibility()
         val briefing = section == HomeSection.BRIEFING
         val context = LocalContext.current
+        val filesDir = lightContext.filesDir
+
+        // A trace from the last run is shown once, before anything else, and sent.
+        var crashShown by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            if (crashShown) return@LaunchedEffect
+            crashShown = true
+            val trace = withContext(Dispatchers.IO) { CrashLog.read(filesDir) } ?: return@LaunchedEffect
+            navigateTo({ CrashScreen(it, trace, filesDir) })
+        }
 
         // Today comes from the notebook, read here because the provider needs a Context and
         // the view model has none. Re-read on every show and every refresh: the calendar
@@ -150,6 +163,34 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         }
 
+        // Refresh is a gesture, not a button: pull down past the top with a finger, or turn the
+        // wheel up past the top. Either has to go a real distance so a bounce does nothing.
+        val pull = remember { Pull() }
+        val refreshConnection = remember(briefing) {
+            object : NestedScrollConnection {
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    if (source != NestedScrollSource.UserInput) return Offset.Zero
+                    val atTop = if (briefing) !briefingScroll.canScrollBackward else !listState.canScrollBackward
+                    if (available.y > 0f && atTop) {
+                        pull.px += available.y
+                        if (pull.px > PULL_TO_REFRESH_PX && !sync.isRefreshing) {
+                            pull.px = 0f
+                            viewModel.refresh()
+                        }
+                    } else {
+                        pull.px = 0f
+                    }
+                    return Offset.Zero
+                }
+
+                override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                    pull.px = 0f
+                    return Velocity.Zero
+                }
+            }
+        }
+        val onTopEdge: (Int) -> Unit = { direction -> if (direction < 0 && !sync.isRefreshing) viewModel.refresh() }
+
         WheelKeys()
         LightTheme(colors = colors) {
             Column(
@@ -157,47 +198,19 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     .fillMaxSize()
                     .background(LightThemeTokens.colors.background),
             ) {
-                ReaderChrome(chrome.visible) {
-                    key(briefing) {
-                        LightTopBar(
-                            leftButton = LightBarButton.LightIcon(
-                                icon = LightIcons.LIST,
-                                onClick = {
-                                    if (briefing) {
-                                        navigateTo({ KagiScreen(it, repository) })
-                                    } else {
-                                        navigateTo({ FeedsScreen(it, repository) })
-                                    }
-                                },
-                                contentDescription = if (briefing) "Kagi categories" else "Subscriptions",
-                            ),
-                            center = LightTopBarCenter.Text(
-                                when {
-                                    briefing -> "Daily Briefing"
-                                    rssOnly -> "RSS"
-                                    else -> "Timeline"
-                                },
-                            ),
-                            rightButton = LightBarButton.LightIcon(
-                                icon = LightIcons.SEARCH,
-                                onClick = { navigateTo({ SearchScreen(it, repository) }) },
-                                contentDescription = "Search everything",
-                            ),
-                        )
-                    }
-                }
-                // The briefing says how old its edition is, and says so while a newer one is
-                // on its way, rather than showing yesterday's page as if it were today's.
+                // No bar. The date is the briefing's title and the first bucket the timeline's;
+                // the tabs, sources, search and settings all live in the bottom bar.
                 val editionLine = editionTime?.let { "EDITION ${Briefing.clockLine(it, java.time.ZoneId.systemDefault())}" }
                 StatusLine(
                     when {
                         briefing && sync.isRefreshing -> listOfNotNull(editionLine, "REFRESHING…").joinToString(" · ")
-                        sync.isRefreshing -> "SYNC ${sync.completedFeeds}/${sync.totalFeeds}"
+                        sync.isRefreshing -> "REFRESHING ${sync.completedFeeds}/${sync.totalFeeds}"
                         sync.message?.contains("could not", ignoreCase = true) == true -> sync.message
                         briefing -> editionLine
                         timelineUnread > 0 -> "$timelineUnread UNREAD"
                         else -> null
                     },
+                    modifier = Modifier.padding(top = 0.5f.gridUnitsAsDp()),
                 )
                 if (briefing) {
                     BriefingContent(
@@ -207,7 +220,10 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                         onToggle = viewModel::toggleExpanded,
                         onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                         scroll = briefingScroll,
-                        modifier = Modifier.weight(1f),
+                        onTopEdge = onTopEdge,
+                        modifier = Modifier
+                            .weight(1f)
+                            .nestedScroll(refreshConnection),
                     )
                 } else {
                     TimelineList(
@@ -215,30 +231,46 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                         emptyMessage = emptyMessage(unreadOnly, favoritesOnly, favoriteCount, feedCount, labelCount),
                         onOpen = { row -> navigateTo({ articleReader(it, row.article.id, repository) }) },
                         onToggleBucket = viewModel::toggleBucket,
-                        modifier = Modifier.weight(1f),
+                        onTopEdge = onTopEdge,
+                        modifier = Modifier
+                            .weight(1f)
+                            .nestedScroll(refreshConnection),
                         imageStore = imageStore,
                         listState = listState,
                     )
                 }
                 ReaderChrome(chrome.visible) {
+                    val sources = LightBarButton.LightIcon(
+                        icon = LightIcons.LIST,
+                        onClick = {
+                            if (briefing) {
+                                navigateTo({ KagiScreen(it, repository) })
+                            } else {
+                                navigateTo({ FeedsScreen(it, repository) })
+                            }
+                        },
+                        contentDescription = if (briefing) "Kagi categories" else "Subscriptions",
+                    )
+                    val search = LightBarButton.LightIcon(
+                        icon = LightIcons.SEARCH,
+                        onClick = { navigateTo({ SearchScreen(it, repository) }) },
+                        contentDescription = "Search everything",
+                    )
+                    val settings = LightBarButton.LightIcon(
+                        icon = LightIcons.SETTINGS,
+                        onClick = { navigateTo({ SettingsScreen(it, repository) }) },
+                    )
                     LightBottomBar(
                         items = if (rssOnly) {
-                            // No tabs to switch between: saved, refresh, archive.
                             listOf(
+                                sources,
                                 LightBarButton.LightIcon(
                                     icon = LightIcons.STAR_OUTLINE,
                                     onClick = { navigateTo({ SavedScreen(it, repository) }) },
                                     contentDescription = "Saved articles",
                                 ),
-                                LightBarButton.LightIcon(
-                                    icon = LightIcons.REFRESH,
-                                    onClick = viewModel::refresh,
-                                ),
-                                LightBarButton.LightIcon(
-                                    icon = LightIcons.DELETE,
-                                    onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
-                                    contentDescription = "Archive",
-                                ),
+                                search,
+                                settings,
                             )
                         } else {
                             listOf(
@@ -254,10 +286,9 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                                     selected = !briefing,
                                     onClick = { viewModel.showSection(HomeSection.TIMELINE) },
                                 ),
-                                LightBarButton.LightIcon(
-                                    icon = LightIcons.REFRESH,
-                                    onClick = viewModel::refresh,
-                                ),
+                                sources,
+                                search,
+                                settings,
                             )
                         },
                     )
@@ -1587,6 +1618,8 @@ private const val SLIDE_OUT_MS = 160
 private const val SLIDE_IN_MS = 220
 /** How far a finger pulls past the end before the page turns. */
 private const val PULL_TO_TURN_PX = 220f
+/** How far a finger pulls down past the top of home before it refreshes. */
+private const val PULL_TO_REFRESH_PX = 160f
 /** The landing zone's share of the screen. */
 private const val UP_NEXT_FRACTION = 0.55f
 
