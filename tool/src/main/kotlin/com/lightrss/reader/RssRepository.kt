@@ -713,15 +713,30 @@ class RssRepository(
         if (!syncMutex.tryLock()) return
         try {
             val rssOnly = dao.getMetadata(RSS_ONLY_KEY) == "1"
-            // In plain-RSS mode Kagi is not on screen, so it is not on the wire either.
-            val feeds = dao.getFeeds().filter { !rssOnly || it.sourceType != Source.KAGI }
             val now = System.currentTimeMillis()
-            // The fifteen-minute rule is for feeds. Kagi publishes once a day around noon UTC,
-            // and a briefing opened at breakfast should not wait a quarter of an hour for it:
-            // a Kagi feed last fetched before today's edition is due is refreshed regardless.
+            // Kagi publishes once a day, around noon UTC — eight in the morning here — and not
+            // again until tomorrow. So a Kagi category is fetched exactly once per edition: when
+            // today's is due and this category has not been fetched since, whether the refresh
+            // was asked for or not. Pulling to refresh at lunch re-reads the feeds and leaves
+            // Kagi alone; there is nothing new there to get. In plain-RSS mode Kagi is not on
+            // screen, so it is not on the wire either.
             val editionDue = todaysEditionAt(now)
-            val kagiStale = feeds.any { it.sourceType == Source.KAGI && it.lastFetchedAt < editionDue && now >= editionDue }
-            if (!force && !kagiStale && feeds.isNotEmpty() && feeds.all { now - it.lastFetchedAt < AUTO_REFRESH_AGE_MS }) {
+            val feeds = dao.getFeeds().filter { feed ->
+                when (feed.sourceType) {
+                    Source.KAGI -> !rssOnly && feed.lastFetchedAt < editionDue
+                    else -> true
+                }
+            }
+            val kagiDue = feeds.any { it.sourceType == Source.KAGI }
+            if (!force && !kagiDue && feeds.isNotEmpty() && feeds.all { now - it.lastFetchedAt < AUTO_REFRESH_AGE_MS }) {
+                return
+            }
+            if (feeds.isEmpty()) {
+                _syncState.value = SyncState(
+                    isRefreshing = false,
+                    lastFinishedAt = now,
+                    message = if (dao.getFeeds().isEmpty()) "Add a feed to begin." else "Up to date",
+                )
                 return
             }
             _syncState.value = SyncState(isRefreshing = true, totalFeeds = feeds.size)

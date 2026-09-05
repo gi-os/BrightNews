@@ -4,6 +4,14 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.4.2 - 2026-09-04
+
+### Changed
+
+- `refreshAll` includes a `Source.KAGI` feed only when `lastFetchedAt < todaysEditionAt(now)`,
+  forced or not; the 15-minute rule applies to the rest. A refresh with nothing to fetch
+  reports "Up to date" without a network round.
+
 ## 3.4.1 - 2026-09-04
 
 ### Changed

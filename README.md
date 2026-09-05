@@ -5,7 +5,7 @@
 A daily briefing for the Light Phone III: today from BrightNotebook, then Kagi News a category
 at a time; and a timeline of every RSS feed and Gmail newsletter you follow, read in one reader. Built on the
 Light SDK; tool id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and
-search stay on the phone. Current release: **v3.4.1** (`tool/lighttool.toml`: versionCode 39).
+search stay on the phone. Current release: **v3.4.2** (`tool/lighttool.toml`: versionCode 40).
 
 ## Install via BrightMarket
 

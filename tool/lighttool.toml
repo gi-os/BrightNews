@@ -3,8 +3,8 @@
 # orphan every subscription, saved article and read state already on the phone.
 id = "com.lightrss.reader"
 label = "News"
-versionCode = 39
-versionName = "3.4.1"
+versionCode = 40
+versionName = "3.4.2"
 permissions = [
     "android.permission.INTERNET",
     "android.permission.CAMERA",
