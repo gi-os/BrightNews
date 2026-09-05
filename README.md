@@ -5,7 +5,7 @@
 A daily briefing for the Light Phone III: today from BrightNotebook, then Kagi News a category
 at a time; and a timeline of every RSS feed and Gmail newsletter you follow, read in one reader. Built on the
 Light SDK; tool id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and
-search stay on the phone. Current release: **v3.4.2** (`tool/lighttool.toml`: versionCode 40).
+search stay on the phone. Current release: **v3.5.0** (`tool/lighttool.toml`: versionCode 41).
 
 ## Install via BrightMarket
 
@@ -215,6 +215,12 @@ git push origin v1.13.0                        # runs release.yml, publishes the
   reader's own row reads **RESTORE**, or use **RESTORE ALL** to undo a sweep. Archived items
   are also exempt from the newsletter trim, the way saved ones are, so hiding an issue is never
   what loses it.
+- **Shake to report.** Rattle the phone — there and back, twice — and a screen asks what went
+  wrong: closed, froze, looks off, slow, other, plus an optional note. It files to the private
+  `gi-os/light-reports` tracker with the build details, the screen you were on and the last crash
+  attached, queued on disk first so a report made offline goes out on the next launch. The
+  accelerometer is on only while News is showing. The gesture arithmetic is `report/ShakeGesture`,
+  free of Android imports so `ShakeGestureTest` can pin it on the JVM.
 - **Reader mode.** **OPEN** fetches the linked article and renders it with no WebView —
   no script, ad or tracking pixel loads. If a site answers with a bot check or a
   paywall, **SIGN IN** opens that one page in the app's only WebView, keeps the cookies
@@ -294,6 +300,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v3.5.0  | —         | Shake to report a bug, filed to light-reports; a folder for the archive instead of the delete glyph; Add moved into the Subscriptions bottom bar |
 | v3.4.0  | —         | Crash catcher that files to light-reports; no header, everything in the bottom bar, pull to refresh; today's dozen only, most-read categories first, position kept across the reader |
 | v3.3.1  | —         | Launch crash with the timeline open: a future-dated article produced a duplicate bucket header |
 | v3.3.0  | —         | Settings → HOME switches between the daily briefing and a plain RSS reader |

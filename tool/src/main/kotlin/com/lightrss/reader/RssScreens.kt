@@ -44,11 +44,15 @@ import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lightrss.reader.hw.WheelScroll
 import com.lightrss.reader.hw.WheelKeys
+import com.lightrss.reader.report.ReportContext
+import com.lightrss.reader.report.Reports
+import com.lightrss.reader.report.ShakeToReport
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
@@ -82,6 +86,10 @@ import com.thelightphone.sdk.ui.lightClickable
 @InitialScreen
 class HomeScreen(sealedActivity: SealedLightActivity) :
     LightScreen<Unit, HomeViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "home"
+    }
+
     override val viewModelClass: Class<HomeViewModel> = HomeViewModel::class.java
 
     override fun createViewModel(): HomeViewModel {
@@ -141,6 +149,19 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             crashShown = true
             val trace = withContext(Dispatchers.IO) { CrashLog.read(filesDir) } ?: return@LaunchedEffect
             navigateTo({ CrashScreen(it, trace, filesDir) })
+        }
+
+        // Shake the phone to say what went wrong. Registered here, on the Activity's lifecycle
+        // rather than this composition, because this is the one screen that is always at the
+        // bottom of the stack: see ShakeToReport for why a tool has to do it this way. Anything
+        // left in the queue from a run that could not reach the network goes out now.
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val packageName = context.packageName
+        LaunchedEffect(lifecycleOwner) {
+            ShakeToReport.install(lifecycleOwner, context) {
+                navigateTo({ ReportScreen(it, filesDir, packageName) })
+            }
+            runCatching { Reports.flush(filesDir) }
         }
 
         // Today comes from the notebook, read here because the provider needs a Context and
@@ -374,6 +395,10 @@ class FeedsScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
 ) : LightScreen<Unit, FeedsViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "subscriptions"
+    }
+
     override val viewModelClass: Class<FeedsViewModel> = FeedsViewModel::class.java
     override fun createViewModel() = FeedsViewModel(repository)
 
@@ -398,14 +423,6 @@ class FeedsScreen(
                     LightTopBar(
                         leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
                         center = LightTopBarCenter.Text("Subscriptions"),
-                        rightButton = LightBarButton.LightIcon(
-                            LightIcons.ADD,
-                            onClick = {
-                                navigateTo({ AddFeedChooserScreen(it, repository) }) { feedId ->
-                                    navigateTo({ FeedScreen(it, feedId, repository) })
-                                }
-                            },
-                        ),
                     )
                 }
                 SettingsRow(
@@ -435,6 +452,18 @@ class FeedsScreen(
                 ReaderChrome(chrome.visible) {
                     LightBottomBar(
                         items = listOf(
+                            // Adding a feed is the thing this screen is for, so it sits in the
+                            // bar with everything else you do here — the top bar is the title
+                            // and the way back, nothing more. Five is the bar's limit.
+                            LightBarButton.LightIcon(
+                                LightIcons.ADD,
+                                onClick = {
+                                    navigateTo({ AddFeedChooserScreen(it, repository) }) { feedId ->
+                                        navigateTo({ FeedScreen(it, feedId, repository) })
+                                    }
+                                },
+                                contentDescription = "Add a feed",
+                            ),
                             // The timeline is RSS and newsletters together, so its sources
                             // screen has to reach both: the mailbox sits beside saved and archive.
                             LightBarButton.Icon(
@@ -447,8 +476,8 @@ class FeedsScreen(
                                 onClick = { navigateTo({ SavedScreen(it, repository) }) },
                                 contentDescription = "Saved articles",
                             ),
-                            LightBarButton.LightIcon(
-                                icon = LightIcons.DELETE,
+                            LightBarButton.Icon(
+                                painter = painterResource(R.drawable.ic_folder_white),
                                 onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
                                 contentDescription = "Archive",
                             ),
@@ -655,6 +684,10 @@ class FeedScreen(
     private val feedId: Long,
     private val repository: RssRepository,
 ) : LightScreen<Unit, FeedViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "feed"
+    }
+
     override val viewModelClass: Class<FeedViewModel> = FeedViewModel::class.java
     override fun createViewModel() = FeedViewModel(feedId, repository)
 
@@ -803,6 +836,10 @@ class SavedScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
 ) : LightScreen<Unit, SavedViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "saved"
+    }
+
     override val viewModelClass: Class<SavedViewModel> = SavedViewModel::class.java
     override fun createViewModel() = SavedViewModel(repository)
 
@@ -853,6 +890,10 @@ class ArchiveScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
 ) : LightScreen<Unit, ArchiveViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "archive"
+    }
+
     override val viewModelClass: Class<ArchiveViewModel> = ArchiveViewModel::class.java
     override fun createViewModel() = ArchiveViewModel(repository)
 
@@ -907,6 +948,10 @@ class SearchScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
 ) : LightScreen<Unit, SearchViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "search"
+    }
+
     override val viewModelClass: Class<SearchViewModel> = SearchViewModel::class.java
     override fun createViewModel() = SearchViewModel(repository)
 
@@ -975,6 +1020,10 @@ class ReaderScreen(
     private val articleId: String,
     private val repository: RssRepository,
 ) : LightScreen<Unit, ReaderViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "reader"
+    }
+
     override val viewModelClass: Class<ReaderViewModel> = ReaderViewModel::class.java
     override fun createViewModel() = ReaderViewModel(articleId, repository)
 
@@ -1198,6 +1247,10 @@ class ReaderPageScreen(
     private val fallbackTitle: String,
     private val repository: RssRepository,
 ) : LightScreen<Unit, ReaderPageViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "reader page"
+    }
+
     override val viewModelClass: Class<ReaderPageViewModel> = ReaderPageViewModel::class.java
     override fun createViewModel() = ReaderPageViewModel(articleId, link, repository)
 
@@ -1307,6 +1360,10 @@ class SettingsScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
 ) : LightScreen<Unit, SettingsViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "settings"
+    }
+
     override val viewModelClass: Class<SettingsViewModel> = SettingsViewModel::class.java
     override fun createViewModel() = SettingsViewModel(repository)
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The archive. Material's outlined folder — a tab on the top-left and a body — drawn to the same
+  spec as the other tool icons: white on transparent, 24dp, 2dp round-join strokes. Until v3.5.0
+  the archive button borrowed the SDK's DELETE glyph (an X in a circle), and people read it as
+  "delete", which is exactly the thing archiving is not. A folder says "put away, still here."
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3,6.5 a1.5,1.5 0 0,1 1.5,-1.5 h4.6 a1.5,1.5 0 0,1 1.06,0.44 L11.9,7.2 h7.6 a1.5,1.5 0 0,1 1.5,1.5 v9.3 a1.5,1.5 0 0,1 -1.5,1.5 h-15 a1.5,1.5 0 0,1 -1.5,-1.5 z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent" />
+</vector>

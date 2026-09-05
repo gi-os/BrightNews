@@ -39,6 +39,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -49,6 +50,7 @@ import com.lightrss.reader.gmail.GmailLabel
 import com.lightrss.reader.hw.WheelKeys
 import com.lightrss.reader.hw.WheelScroll
 import com.thelightphone.sdk.LightScreen
+import com.lightrss.reader.report.ReportContext
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.rememberKeyboardOptions
 import com.thelightphone.sdk.ui.LightBarButton
@@ -374,6 +376,10 @@ class NewsletterReaderScreen(
     private val articleId: String,
     private val repository: RssRepository,
 ) : LightScreen<Unit, NewsletterReaderViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "newsletter"
+    }
+
     override val viewModelClass: Class<NewsletterReaderViewModel> =
         NewsletterReaderViewModel::class.java
 
@@ -496,19 +502,21 @@ class NewsletterReaderScreen(
                                 text = if (article?.isRead == true) "UNREAD" else "READ",
                                 onClick = viewModel::toggleRead,
                             ),
-                            LightBarButton.LightIcon(
-                                icon = if (article?.isArchived == true) {
-                                    LightIcons.LOOP
-                                } else {
-                                    LightIcons.DELETE
-                                },
-                                onClick = { viewModel.toggleArchived { goBack() } },
-                                contentDescription = if (article?.isArchived == true) {
-                                    "Restore from archive"
-                                } else {
-                                    "Archive"
-                                },
-                            ),
+                            // The folder is the archive everywhere in the app; LOOP is the way
+                            // back out of it. Neither is the X-in-a-circle, which reads as delete.
+                            if (article?.isArchived == true) {
+                                LightBarButton.LightIcon(
+                                    icon = LightIcons.LOOP,
+                                    onClick = { viewModel.toggleArchived { goBack() } },
+                                    contentDescription = "Restore from archive",
+                                )
+                            } else {
+                                LightBarButton.Icon(
+                                    painter = painterResource(R.drawable.ic_folder_white),
+                                    onClick = { viewModel.toggleArchived { goBack() } },
+                                    contentDescription = "Archive",
+                                )
+                            },
                         ),
                     )
                 }
@@ -527,6 +535,10 @@ class MailboxScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
 ) : LightScreen<Unit, MailboxViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "mailbox"
+    }
+
     override val viewModelClass: Class<MailboxViewModel> = MailboxViewModel::class.java
     override fun createViewModel() = MailboxViewModel(repository)
 
@@ -667,8 +679,8 @@ class MailboxScreen(
                 }
                 LightBottomBar(
                     items = listOf(
-                        LightBarButton.LightIcon(
-                            icon = LightIcons.DELETE,
+                        LightBarButton.Icon(
+                            painter = painterResource(R.drawable.ic_folder_white),
                             onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
                             contentDescription = "Archive",
                         ),
@@ -691,6 +703,10 @@ class LabelPickerScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
 ) : LightScreen<Long, LabelPickerViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "labels"
+    }
+
     override val viewModelClass: Class<LabelPickerViewModel> = LabelPickerViewModel::class.java
     override fun createViewModel() = LabelPickerViewModel(repository)
 

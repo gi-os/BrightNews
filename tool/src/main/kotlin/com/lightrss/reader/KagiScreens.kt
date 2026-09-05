@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.lightrss.reader.hw.WheelKeys
 import com.lightrss.reader.hw.WheelScroll
 import com.thelightphone.sdk.LightScreen
+import com.lightrss.reader.report.ReportContext
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
@@ -44,6 +45,10 @@ class KagiScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
 ) : LightScreen<Unit, KagiFeedsViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "kagi"
+    }
+
     override val viewModelClass: Class<KagiFeedsViewModel> = KagiFeedsViewModel::class.java
     override fun createViewModel() = KagiFeedsViewModel(repository)
 
@@ -147,6 +152,10 @@ class KagiPickerScreen(
     sealedActivity: SealedLightActivity,
     private val repository: RssRepository,
 ) : LightScreen<Long, KagiPickerViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "kagi picker"
+    }
+
     override val viewModelClass: Class<KagiPickerViewModel> = KagiPickerViewModel::class.java
     override fun createViewModel() = KagiPickerViewModel(repository)
 
