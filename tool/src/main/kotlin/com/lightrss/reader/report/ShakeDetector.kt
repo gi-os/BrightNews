@@ -1,6 +1,6 @@
 package com.lightrss.reader.report
 
-import android.content.Context
+import android.content.Context // light-sdk-allow: the accelerometer is a system service, and a tool has no other way to reach one
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -19,7 +19,7 @@ import kotlin.math.sqrt
  */
 class ShakeDetector(context: Context, private val onShake: () -> Unit) : SensorEventListener {
 
-    private val sensors = context.getSystemService(SensorManager::class.java)
+    private val sensors = context.getSystemService(SensorManager::class.java) // light-sdk-allow: shake-to-report reads the accelerometer, nothing else
     private val accelerometer = sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val gesture = ShakeGesture()
 

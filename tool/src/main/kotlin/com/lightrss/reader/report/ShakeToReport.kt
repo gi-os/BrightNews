@@ -1,6 +1,6 @@
 package com.lightrss.reader.report
 
-import android.content.Context
+import android.content.Context // light-sdk-allow: handed on to ShakeDetector for the SensorManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
