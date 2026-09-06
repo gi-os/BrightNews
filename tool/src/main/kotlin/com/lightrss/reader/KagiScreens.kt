@@ -20,7 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.lightrss.reader.hw.WheelKeys
 import com.lightrss.reader.hw.WheelScroll
 import com.thelightphone.sdk.LightScreen
-import com.lightrss.reader.report.ReportContext
+import com.gios.light.common.report.ReportContext
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
@@ -61,7 +61,7 @@ class KagiScreen(
         val listState = rememberLazyListState()
         ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -174,7 +174,7 @@ class KagiPickerScreen(
         val chrome = rememberChromeVisibility()
         ChromeScrollEffect(scroll, chrome)
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()

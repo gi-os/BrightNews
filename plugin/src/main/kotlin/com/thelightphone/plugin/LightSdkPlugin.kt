@@ -46,6 +46,12 @@ class LightSdkPlugin : Plugin<Project> {
             // Android surface, no network, no reflection, and nothing this policy exists to
             // prevent. It is the only entry here that is not already inside the APK.
             "org.jsoup:jsoup",
+            // The shared Bright* plumbing: shake-to-report, the crash offer, the report queue.
+            // Every other app on the phone files its issues through this one library, and a
+            // vendored copy drifts from it within a release. It is Compose + OkHttp + the
+            // lifecycle runtime, all already allowed above; the accelerometer and the crash
+            // handler live inside the library, not in tool source.
+            "com.gios:light-common",
         )
 
         val ALLOWED_PLUGINS = setOf(

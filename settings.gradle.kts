@@ -13,8 +13,15 @@ val localPropertiesFile = file("local.properties")
 if (localPropertiesFile.exists()) {
     localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
-val ghUsername = localProperties.getProperty("gpr.user") ?: System.getenv("GH_PACKAGES_USER")
-val ghPassword = localProperties.getProperty("gpr.key") ?: System.getenv("GH_PACKAGES_TOKEN")
+// An unset repository secret arrives as an empty string, not null, so the chain has to test for
+// blank at every step or it never reaches its fallback.
+fun String?.orBlank(): String? = this?.takeUnless { it.isBlank() }
+val ghUsername = localProperties.getProperty("gpr.user").orBlank()
+    ?: System.getenv("GH_PACKAGES_USER").orBlank()
+    ?: System.getenv("GITHUB_ACTOR").orBlank()
+val ghPassword = localProperties.getProperty("gpr.key").orBlank()
+    ?: System.getenv("GH_PACKAGES_TOKEN").orBlank()
+    ?: System.getenv("GITHUB_TOKEN").orBlank()
 
 dependencyResolutionManagement {
     repositories {
@@ -23,6 +30,15 @@ dependencyResolutionManagement {
         maven {
             name = "GitHubPackages-Keyboard"
             url = uri("https://maven.pkg.github.com/lightphone/light-keyboard")
+            credentials {
+                username = ghUsername
+                password = ghPassword
+            }
+        }
+        // com.gios:light-common — shake-to-report and the crash offer shared by the Bright* apps.
+        maven {
+            name = "GitHubPackages-BrightCommon"
+            url = uri("https://maven.pkg.github.com/gi-os/BrightCommon")
             credentials {
                 username = ghUsername
                 password = ghPassword

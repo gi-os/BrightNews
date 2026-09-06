@@ -44,15 +44,14 @@ import kotlinx.coroutines.Dispatchers
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.painterResource
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.gios.light.common.report.Feedback
+import com.gios.light.common.report.LightReport
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lightrss.reader.hw.WheelScroll
 import com.lightrss.reader.hw.WheelKeys
-import com.lightrss.reader.report.ReportContext
-import com.lightrss.reader.report.Reports
-import com.lightrss.reader.report.ShakeToReport
+import com.gios.light.common.report.ReportContext
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
@@ -93,8 +92,11 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
     override val viewModelClass: Class<HomeViewModel> = HomeViewModel::class.java
 
     override fun createViewModel(): HomeViewModel {
-        // Before anything else can fail: the next launch shows whatever this one dies of.
-        CrashLog.install(lightContext.filesDir)
+        // Before anything else can fail: the next launch offers whatever this one dies of. This
+        // writes the same file light-common's own handler does, so the offer is one chip either
+        // way; the library's handler arms with LightReport.install at first composition, and
+        // this covers the moment between here and there.
+        EarlyCrashLog.install(lightContext.filesDir)
         val database = lightContext.buildDatabase(
             RssDatabase::class.java,
             // The file keeps its name across the rename. Pointing at a new one would silently
@@ -140,28 +142,17 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         val chrome = rememberChromeVisibility()
         val briefing = section == HomeSection.BRIEFING
         val context = LocalContext.current
-        val filesDir = lightContext.filesDir
 
-        // A trace from the last run is shown once, before anything else, and sent.
-        var crashShown by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) {
-            if (crashShown) return@LaunchedEffect
-            crashShown = true
-            val trace = withContext(Dispatchers.IO) { CrashLog.read(filesDir) } ?: return@LaunchedEffect
-            navigateTo({ CrashScreen(it, trace, filesDir) })
-        }
-
-        // Shake the phone to say what went wrong. Registered here, on the Activity's lifecycle
-        // rather than this composition, because this is the one screen that is always at the
-        // bottom of the stack: see ShakeToReport for why a tool has to do it this way. Anything
-        // left in the queue from a run that could not reach the network goes out now.
-        val lifecycleOwner = LocalLifecycleOwner.current
-        val packageName = context.packageName
-        LaunchedEffect(lifecycleOwner) {
-            ShakeToReport.install(lifecycleOwner, context) {
-                navigateTo({ ReportScreen(it, filesDir, packageName) })
-            }
-            runCatching { Reports.flush(filesDir) }
+        // Reporting, the way every other Bright* app does it: light-common's chip. Installed
+        // once, here, because home is the one screen always at the bottom of the stack; the
+        // overlay itself rides in NewsTheme so a shake on any screen raises the chip there.
+        remember(context) {
+            LightReport.install(
+                context = context,
+                appName = "News",
+                label = "news",
+                token = BuildConfig.REPORT_TOKEN,
+            )
         }
 
         // Today comes from the notebook, read here because the provider needs a Context and
@@ -213,7 +204,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         val onTopEdge: (Int) -> Unit = { direction -> if (direction < 0 && !sync.isRefreshing) viewModel.refresh() }
 
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -413,7 +404,7 @@ class FeedsScreen(
         val listState = rememberLazyListState()
         ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -504,7 +495,7 @@ class AddFeedChooserScreen(
     @Composable
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -569,7 +560,7 @@ class ScanFeedScreen(
             navigateTo({ MessageScreen(it, message) })
         }
 
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -633,7 +624,7 @@ class AddFeedScreen(
             )
         }
 
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             when {
                 state.isAdding -> {
                     Column(
@@ -705,7 +696,7 @@ class FeedScreen(
         val listState = rememberLazyListState()
         ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -802,7 +793,7 @@ private class DeleteFeedScreen(
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
         val isDeleting by viewModel.isDeleting.collectAsState()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             if (isDeleting) {
                 Column(
                     modifier = Modifier
@@ -852,7 +843,7 @@ class SavedScreen(
         val listState = rememberLazyListState()
         ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -906,7 +897,7 @@ class ArchiveScreen(
         val listState = rememberLazyListState()
         ChromeScrollEffect(listState, chrome, ROW_STEP_PX)
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -966,7 +957,7 @@ class SearchScreen(
         var lightKeys by rememberSaveable { mutableStateOf(false) }
 
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             if (state.editorOpen) {
                 if (lightKeys) {
                     LightTextInputEditor(
@@ -1109,7 +1100,7 @@ class ReaderScreen(
         // the top: the previous one. One notch past the end is enough now that the landing
         // zone under the article says what the turn will open.
         val wheelEdge = WheelScroll(scroll, onEdge = { direction -> turnWithSlide(direction) }, edgeNotches = 1)
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1270,7 +1261,7 @@ class ReaderPageScreen(
         ChromeScrollEffect(scroll, chrome)
         WheelKeys()
         WheelScroll(scroll)
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1378,7 +1369,7 @@ class SettingsScreen(
 
         WheelKeys()
         WheelScroll(scroll)
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1397,6 +1388,9 @@ class SettingsScreen(
                     }
                     SettingsRow("MAILBOX", "Gmail account, labels and newsletter rendering") {
                         navigateTo({ MailboxScreen(it, repository) })
+                    }
+                    SettingsRow("SEND FEEDBACK", "A bug or an idea — the same chip a shake raises") {
+                        Feedback.ask()
                     }
                     SettingsRow(
                         title = if (rssOnly) "HOME: RSS ONLY" else "HOME: DAILY BRIEFING",
@@ -1508,7 +1502,7 @@ internal class ConfirmationScreen(
     @Composable
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             ConfirmationContent(
                 message = message,
                 confirmLabel = confirmLabel,
@@ -1526,7 +1520,7 @@ internal class MessageScreen(
     @Composable
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             LightFullscreenModal(message = message, onClose = { goBack() })
         }
     }

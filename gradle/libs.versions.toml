@@ -29,6 +29,7 @@ compose-runtime = { module = "androidx.compose.runtime:runtime" }
 compose-activity = { module = "androidx.activity:activity-compose", version = "1.13.0" }
 androidx-annotation = { module = "androidx.annotation:annotation", version = "1.10.0" }
 androidx-splashscreen = { module = "androidx.core:core-splashscreen", version = "1.0.1" }
+light-common = { module = "com.gios:light-common", version = "1.8.0" }
 kotlinx-coroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version = "1.10.2" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version = "1.10.2" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.8.1" }

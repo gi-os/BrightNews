@@ -50,7 +50,7 @@ import com.lightrss.reader.gmail.GmailLabel
 import com.lightrss.reader.hw.WheelKeys
 import com.lightrss.reader.hw.WheelScroll
 import com.thelightphone.sdk.LightScreen
-import com.lightrss.reader.report.ReportContext
+import com.gios.light.common.report.ReportContext
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.rememberKeyboardOptions
 import com.thelightphone.sdk.ui.LightBarButton
@@ -412,7 +412,7 @@ class NewsletterReaderScreen(
         ChromeScrollEffect(scroll, chrome)
 
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -553,7 +553,7 @@ class MailboxScreen(
 
         WheelKeys()
         WheelScroll(scroll)
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -716,7 +716,7 @@ class LabelPickerScreen(
         val state by viewModel.state.collectAsState()
 
         WheelKeys()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -861,7 +861,7 @@ class GmailSignInScreen(
 
         WheelKeys()
         WheelScroll(webRef)
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -949,7 +949,7 @@ class ClientIdChooserScreen(
     @Composable
     override fun Content() {
         val colors by LightThemeController.colors.collectAsState()
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1012,7 +1012,7 @@ class ClientIdScreen(
             viewModel.submit(raw) { goBack() }
         }
 
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             when {
                 scan -> Column(
                     modifier = Modifier

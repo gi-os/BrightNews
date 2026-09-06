@@ -103,6 +103,8 @@ dependencies {
     // Newsletter rendering. Also on the unit-test classpath: NewsletterHtml is the one piece of
     // the Gmail path that can be tested without a device or a mailbox.
     implementation(libs.jsoup)
+    // Shake-to-report, the crash offer and the report queue, shared with every other Bright* app.
+    implementation(libs.light.common)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.jsoup)
     ksp(libs.androidx.room.compiler)

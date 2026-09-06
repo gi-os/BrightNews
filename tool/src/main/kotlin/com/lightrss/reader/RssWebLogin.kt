@@ -92,7 +92,7 @@ class SignInScreen(
             }
         }
 
-        LightTheme(colors = colors) {
+        NewsTheme(colors) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()

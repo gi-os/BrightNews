@@ -4,6 +4,19 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.6.0 - 2026-09-05
+
+### Changed
+
+- Reporting moves to `com.gios:light-common` 1.8.0: `LightReport.install` in `HomeScreen`,
+  `ReportOverlay` behind every screen via the new `NewsTheme(colors) { }` wrapper (bottom-right,
+  above the bar), `Feedback.ask()` from Settings. The vendored `report/` package, `ReportScreen`
+  and `CrashReport` are deleted; `EarlyCrashLog` keeps a handler for the window before first
+  composition, writing the library's `last-crash.txt`.
+- Plugin `ALLOWED_DEPENDENCIES` gains `com.gios:light-common`; `settings.gradle.kts` adds the
+  BrightCommon GitHub Packages repo with a blank-safe credential chain (GH_PACKAGES_* →
+  GITHUB_ACTOR/GITHUB_TOKEN); workflows get `packages: read` and pass `GITHUB_TOKEN`.
+
 ## 3.4.2 - 2026-09-04
 
 ### Changed

@@ -1,19 +1,16 @@
-# News 3.5.0
+# News 3.6.0
 
-**Shake the phone to say what went wrong.** A quick rattle — there and back, twice — opens a
-short screen: pick what happened (closed, froze, looks off, slow, other), add a note if you want
-one, SEND. It is filed to the private light-reports tracker with the build details, the screen
-you were on and the last crash attached, the same way the other Bright apps do it. Reports are
-written to the phone first and sent afterwards, so one filed with no signal goes out on the next
-launch instead of being lost. The accelerometer runs only while News is on the screen.
+**Reporting is the shared chip now.** News files its issues through `light-common`, the same
+library every other Bright* app uses, instead of its own copy of the shake screen and its own
+crash catcher. Shake the phone and a small chip appears in the bottom-right corner — SEND
+FEEDBACK? — a tap opens the sheet, and ignoring it lets it fade. A crash last run raises the
+same chip once on the next launch with the trace attached. A failure the app notices itself
+does too. Settings has a SEND FEEDBACK row for when there is nothing to shake about. Reports
+carry the install id, the screen you were on, a screenshot taken at the shake, and go out from
+disk, so one filed with no signal is sent on the next launch.
 
-**The archive is a folder now.** The Archive button in Subscriptions, in the Mailbox and in the
-newsletter reader used the SDK's X-in-a-circle, which reads as delete — the one thing archiving
-is not. It is Material's outlined folder now, drawn to the same weight as the other icons.
+Behind it: the SDK tool policy now allows `com.gios:light-common` — Compose, OkHttp and the
+lifecycle runtime, all already permitted — and the accelerometer and crash handler live inside
+the library rather than in tool source.
 
-**Add is in the bottom bar.** On the Subscriptions screen the + moved out of the top-right corner
-and into the bar with Mailbox, Saved, Archive and Settings, so everything you do on that screen
-is in one place and the top bar is the title and the way back.
-
-Both changes came from a suggestion in the Discord. No schema change. Installs over 3.4.2 and
-keeps everything.
+No schema change. Installs over 3.5.0 and keeps everything.

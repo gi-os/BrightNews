@@ -28,7 +28,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.thelightphone.sdk.ui.LightColors
 import com.thelightphone.sdk.ui.LightTheme
+import com.gios.light.common.report.ReportContext
+import com.gios.light.common.report.ReportOverlay
 import com.lightrss.reader.hw.WheelScroll
 import com.thelightphone.sdk.ui.LightBarButton
 import com.thelightphone.sdk.ui.LightBottomBar
@@ -210,6 +213,59 @@ fun HairlineDivider(modifier: Modifier = Modifier) {
             .height(1.dp)
             .background(LightThemeTokens.colors.contentSecondary.copy(alpha = 0.25f)),
     )
+}
+
+/**
+ * The app's theme, with the report chip riding along.
+ *
+ * A tool composes only its top screen, so an overlay placed on one screen is gone the moment
+ * another is pushed. Every screen already opens with `LightTheme(colors) { … }`; routing that
+ * through here puts light-common's [ReportOverlay] — the shake sensor, the crash offer, the chip
+ * in the corner — behind every screen with one line changed per screen and nothing re-indented.
+ * The chip sits bottom-right, above the bottom bar.
+ */
+@Composable
+fun NewsTheme(colors: LightColors, content: @Composable () -> Unit) {
+    LightTheme(colors = colors) {
+        content()
+        ReportOverlay(
+            corner = Alignment.BottomEnd,
+            inset = 1.5f.gridUnitsAsDp(),
+            bottomInset = 6f.gridUnitsAsDp(),
+        )
+    }
+}
+
+/**
+ * A crash handler for the first milliseconds, before light-common's has been installed.
+ *
+ * `LightReport.install` needs a Context and the tool has none until its first composition; a
+ * crash in between — building the database, constructing the view model — would leave nothing
+ * behind. This writes the same `last-crash.txt` the library reads, so a crash caught here is
+ * offered by the same chip on the next launch. It chains onto whatever was there, and the
+ * library's handler later chains onto it.
+ */
+object EarlyCrashLog {
+    private const val FILE = "last-crash.txt"
+
+    fun install(filesDir: java.io.File) {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        if (previous is Handler) return
+        Thread.setDefaultUncaughtExceptionHandler(Handler(filesDir, previous))
+    }
+
+    private class Handler(
+        private val filesDir: java.io.File,
+        private val previous: Thread.UncaughtExceptionHandler?,
+    ) : Thread.UncaughtExceptionHandler {
+        override fun uncaughtException(thread: Thread, error: Throwable) {
+            runCatching {
+                val stack = java.io.StringWriter().also { error.printStackTrace(java.io.PrintWriter(it)) }.toString()
+                java.io.File(filesDir, FILE).writeText("News v${BuildConfig.VERSION_NAME}\nthread: ${thread.name}\nscreen: ${ReportContext.screen}\n\n$stack")
+            }
+            previous?.uncaughtException(thread, error)
+        }
+    }
 }
 
 /**
