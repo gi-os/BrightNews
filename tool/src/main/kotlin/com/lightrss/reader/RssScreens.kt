@@ -146,14 +146,16 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         // Reporting, the way every other Bright* app does it: light-common's chip. Installed
         // once, here, because home is the one screen always at the bottom of the stack; the
         // overlay itself rides in NewsTheme so a shake on any screen raises the chip there.
-        remember(context) {
+        val reporting = remember(context) {
             LightReport.install(
                 context = context,
                 appName = "News",
                 label = "news",
                 token = BuildConfig.REPORT_TOKEN,
             )
+            LightReport.installed
         }
+        check(reporting)
 
         // Today comes from the notebook, read here because the provider needs a Context and
         // the view model has none. Re-read on every show and every refresh: the calendar
