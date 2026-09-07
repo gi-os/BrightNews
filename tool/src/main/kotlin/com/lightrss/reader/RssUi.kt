@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.TimeZone
 import com.thelightphone.sdk.ui.LightColors
 import com.thelightphone.sdk.ui.LightTheme
 import com.gios.light.common.report.ReportContext
@@ -684,6 +685,21 @@ fun ConfirmationContent(
     }
 }
 
+/**
+ * `ZoneId.systemDefault()` is a live call, but the zone it reports is cached by the JVM the
+ * first time anything asks, and Android only clears that cache from a manifest-registered
+ * receiver on `ACTION_TIMEZONE_CHANGED`. A Light SDK tool ships no manifest and owns no
+ * receiver (see the tool's own docs on why), so a zone that was ever wrong the first time this
+ * process asked — cold boot before the system property settled, a phone whose clock finished
+ * syncing after the tool was already running — stays wrong for the rest of the process's life,
+ * and every clock in the app reads off it. Clearing the cached default before every read costs
+ * nothing and means the zone is never more than one call stale.
+ */
+fun currentZone(): ZoneId {
+    TimeZone.setDefault(null)
+    return ZoneId.systemDefault()
+}
+
 fun relativeTime(timestamp: Long, now: Long = System.currentTimeMillis()): String {
     val seconds = max(0L, (now - timestamp) / 1_000L)
     return when {
@@ -692,14 +708,14 @@ fun relativeTime(timestamp: Long, now: Long = System.currentTimeMillis()): Strin
         seconds < 86_400 -> "${seconds / 3_600}H"
         seconds < 604_800 -> "${seconds / 86_400}D"
         else -> DateTimeFormatter.ofPattern("MMM d", Locale.US)
-            .format(Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()))
+            .format(Instant.ofEpochMilli(timestamp).atZone(currentZone()))
             .uppercase(Locale.US)
     }
 }
 
 fun fullDate(timestamp: Long): String =
     DateTimeFormatter.ofPattern("MMM d, yyyy · h:mm a", Locale.US)
-        .format(Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()))
+        .format(Instant.ofEpochMilli(timestamp).atZone(currentZone()))
         .uppercase(Locale.US)
 
 fun sourceHost(url: String): String = runCatching {

@@ -146,16 +146,19 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         // Reporting, the way every other Bright* app does it: light-common's chip. Installed
         // once, here, because home is the one screen always at the bottom of the stack; the
         // overlay itself rides in NewsTheme so a shake on any screen raises the chip there.
-        val reporting = remember(context) {
-            LightReport.install(
-                context = context,
-                appName = "News",
-                label = "news",
-                token = BuildConfig.REPORT_TOKEN,
-            )
-            LightReport.installed
+        // Best-effort: a failed install (no network, a bad token, a race on the flag) must
+        // never take the whole app down over an optional feedback channel, so this only
+        // attempts the install and swallows whatever it does not manage.
+        remember(context) {
+            runCatching {
+                LightReport.install(
+                    context = context,
+                    appName = "News",
+                    label = "news",
+                    token = BuildConfig.REPORT_TOKEN,
+                )
+            }
         }
-        check(reporting)
 
         // Today comes from the notebook, read here because the provider needs a Context and
         // the view model has none. Re-read on every show and every refresh: the calendar
@@ -214,7 +217,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
             ) {
                 // No bar. The date is the briefing's title and the first bucket the timeline's;
                 // the tabs, sources, search and settings all live in the bottom bar.
-                val editionLine = editionTime?.let { "EDITION ${Briefing.clockLine(it, java.time.ZoneId.systemDefault())}" }
+                val editionLine = editionTime?.let { "EDITION ${Briefing.clockLine(it, currentZone())}" }
                 StatusLine(
                     when {
                         briefing && sync.isRefreshing -> listOfNotNull(editionLine, "REFRESHING…").joinToString(" · ")

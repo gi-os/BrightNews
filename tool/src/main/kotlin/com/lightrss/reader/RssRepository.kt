@@ -582,7 +582,7 @@ class RssRepository(
      * breakfast and lunch because you happened to read Tech first today.
      */
     suspend fun kagiOrder(): List<Long> {
-        val today = java.time.LocalDate.now(java.time.ZoneId.systemDefault()).toEpochDay()
+        val today = java.time.LocalDate.now(currentZone()).toEpochDay()
         val storedDay = dao.getMetadata(KAGI_ORDER_DAY_KEY)?.toLongOrNull()
         val stored = dao.getMetadata(KAGI_ORDER_KEY)?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty()
         val feeds = dao.getKagiFeeds()
@@ -612,6 +612,20 @@ class RssRepository(
         var due = utc.toLocalDate().atTime(KAGI_EDITION_HOUR_UTC, 0).toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
         if (due > now) due -= 24 * 60 * 60 * 1_000L
         return due
+    }
+
+    /**
+     * Today's 8 AM local, the one scheduled moment an unforced refresh is allowed to run.
+     * Reusing [AUTO_REFRESH_HOUR_LOCAL] rather than hardcoding "8" here in case it ever drifts
+     * from Kagi's own edition time again.
+     */
+    private fun todaysAutoRefreshAt(now: Long): Long {
+        val zone = currentZone()
+        return java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+            .atTime(AUTO_REFRESH_HOUR_LOCAL, 0)
+            .atZone(zone)
+            .toInstant()
+            .toEpochMilli()
     }
 
     private suspend fun refreshKagi(feed: FeedEntity) {
@@ -727,9 +741,14 @@ class RssRepository(
                     else -> true
                 }
             }
-            val kagiDue = feeds.any { it.sourceType == Source.KAGI }
-            if (!force && !kagiDue && feeds.isNotEmpty() && feeds.all { now - it.lastFetchedAt < AUTO_REFRESH_AGE_MS }) {
-                return
+            // An unforced call is the app opening or coming back to the foreground, which used
+            // to mean a refresh every time regardless of the hour. Now it is a scheduled 8 AM
+            // local check-in: run once the day's 8 AM has passed, and not again until tomorrow's
+            // has. Pulling the wheel (force = true) always goes straight through.
+            if (!force) {
+                val refreshDueAt = todaysAutoRefreshAt(now)
+                val lastAutoRefreshAt = dao.getMetadata(LAST_AUTO_REFRESH_AT_KEY)?.toLongOrNull() ?: 0L
+                if (now < refreshDueAt || lastAutoRefreshAt >= refreshDueAt) return
             }
             if (feeds.isEmpty()) {
                 _syncState.value = SyncState(
@@ -739,6 +758,7 @@ class RssRepository(
                 )
                 return
             }
+            if (!force) dao.putMetadata(AppMetadataEntity(LAST_AUTO_REFRESH_AT_KEY, now.toString()))
             _syncState.value = SyncState(isRefreshing = true, totalFeeds = feeds.size)
             var failures = 0
             feeds.forEachIndexed { index, feed ->
@@ -908,7 +928,9 @@ class RssRepository(
         private const val COLOUR_KEY = "lift_greyscale"
         private const val HOME_FAVORITES_KEY = "home_favorites_only"
         private const val HOME_UNREAD_KEY = "home_unread_only"
-        private const val AUTO_REFRESH_AGE_MS = 15 * 60 * 1_000L
+        /** The one hour of the day an unforced refresh is allowed to run — see [todaysAutoRefreshAt]. */
+        private const val AUTO_REFRESH_HOUR_LOCAL = 8
+        private const val LAST_AUTO_REFRESH_AT_KEY = "last_auto_refresh_at"
         private const val MAX_TITLE_LENGTH = 600
         private const val MAX_AUTHOR_LENGTH = 300
         private const val MAX_URL_LENGTH = 4_000

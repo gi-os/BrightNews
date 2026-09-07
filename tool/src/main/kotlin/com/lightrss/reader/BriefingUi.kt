@@ -56,10 +56,12 @@ fun BriefingContent(
     modifier: Modifier = Modifier,
 ) {
     val now = System.currentTimeMillis()
-    val zone = ZoneId.systemDefault()
+    val zone = currentZone()
     val nowMinute = java.time.Instant.ofEpochMilli(now).atZone(zone).let { it.hour * 60 + it.minute }
-    // Two notches up past the top is a refresh; the bottom edge does nothing here.
-    WheelScroll(scroll, onEdge = onTopEdge, edgeNotches = 2)
+    // Same edge distance as everywhere else in the app: three deliberate notches past the
+    // top is a refresh (see EDGE_NOTCHES) rather than a hair-trigger two, so a stray overshoot
+    // scrolling back up to the top does not fire it by accident.
+    WheelScroll(scroll, onEdge = onTopEdge)
     LightScrollView(
         modifier = modifier.fillMaxWidth(),
         scrollState = scroll,
@@ -334,7 +336,7 @@ fun TimelineList(
             }
         }
     }
-    WheelScroll(listState, onEdge = onTopEdge, edgeNotches = 2)
+    WheelScroll(listState, onEdge = onTopEdge)
     LightLazyScrollView(
         modifier = modifier,
         listState = listState,

@@ -114,7 +114,7 @@ class HomeViewModel(
         combine(unreadOnly, favoritesOnly) { unread, favourites -> unread to favourites }
             .flatMapLatest { (unread, favourites) -> repository.observeTimeline(unread, favourites) }
             .combine(_openedBuckets) { rows, opened ->
-                Briefing.timeline(rows, System.currentTimeMillis(), java.time.ZoneId.systemDefault(), opened)
+                Briefing.timeline(rows, System.currentTimeMillis(), currentZone(), opened)
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
