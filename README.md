@@ -2,6 +2,8 @@
 
 # News
 
+[**⬇ Download the latest APK**](https://github.com/gi-os/BrightNews/releases/latest) · free, open source.
+
 A daily briefing for the Light Phone III: today from BrightNotebook, then Kagi News a category
 at a time; and a timeline of every RSS feed and Gmail newsletter you follow, read in one reader. Built on the
 Light SDK; tool id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and
