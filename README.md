@@ -7,7 +7,7 @@
 A daily briefing for the Light Phone III: today from BrightNotebook, then Kagi News a category
 at a time; and a timeline of every RSS feed and Gmail newsletter you follow, read in one reader. Built on the
 Light SDK; tool id `com.lightrss.reader`. Feeds, labels, read state, saved items, images and
-search stay on the phone. Current release: **v3.6.0** (`tool/lighttool.toml`: versionCode 42).
+search stay on the phone. Current release: **v3.6.1** (`tool/lighttool.toml`: versionCode 43).
 
 ## Install via BrightMarket
 
@@ -302,7 +302,8 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
-| v3.6.0  | —         | Reporting through light-common's chip: shake, crash offer, Settings → Send feedback |
+| v3.6.1  | —         | Startup crash on every launch in 3.6.0 (reporting install was asserted, not attempted); 8 AM daily refresh instead of every open; clocks follow timezone changes; pull-to-refresh needs the standard 3 notches |
+| v3.6.0  | f2954c2   | Reporting through light-common's chip: shake, crash offer, Settings → Send feedback |
 | v3.5.0  | —         | Shake to report a bug, filed to light-reports; a folder for the archive instead of the delete glyph; Add moved into the Subscriptions bottom bar |
 | v3.4.0  | —         | Crash catcher that files to light-reports; no header, everything in the bottom bar, pull to refresh; today's dozen only, most-read categories first, position kept across the reader |
 | v3.3.1  | —         | Launch crash with the timeline open: a future-dated article produced a duplicate bucket header |
