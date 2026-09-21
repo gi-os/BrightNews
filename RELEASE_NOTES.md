@@ -1,25 +1,25 @@
-# News 3.6.1
+# News 3.7.0
 
-**3.6.0 crashed on every launch. This is the fix, plus three smaller ones that were sitting on `main` behind it.**
+**The list button now goes to the same place from both tabs.**
 
-The 3.6.0 release moved reporting onto `light-common`. A same-day commit followed the install
-call with `check(reporting)` — an assertion that the reporting chip had armed synchronously.
-It usually hadn't: `LightReport.install` returns before its flag flips whenever there is no
-network, the token is rejected, or the install is simply racing first composition. The
-assertion threw, the home screen never composed, and the app died before the crash chip it
-was asserting on could catch anything — which is why no report was ever filed for it.
-Reporting is a best-effort side channel; it is now attempted inside `runCatching` and the
-result ignored. News opens whether or not the chip armed.
+Before this release the middle button in the home bar routed on whichever tab you were on:
+from the Daily Briefing it opened Kagi's categories, from the Timeline it opened your RSS
+subscriptions. Same glyph, same slot, two destinations. A reader who learned it on the
+briefing could not find the feeds they had just subscribed to, because every press landed in
+Kagi. Reported on Discord, and fair.
 
-Also in this release, all fixed on September 6 and never cut:
+The button now opens one **Sources** screen from either tab. Three rows, always in this order,
+each with a count so an empty section says so before you open it:
 
-- **Refresh ran on every open.** The unforced refresh fired whenever any feed was 15 minutes
-  stale, which is always. It is now a once-a-day 8 AM local check-in, tracked in a
-  `last_auto_refresh_at` metadata row. Pull to refresh is unchanged.
-- **Clocks stuck in the old timezone.** Every clock read `ZoneId.systemDefault()`, which the
-  JVM caches and Android only invalidates through a manifest receiver a Light SDK tool
-  cannot register. `currentZone()` clears the cache before each read; every call site uses it.
-- **Pull-to-refresh was a hair trigger.** The briefing and timeline set `edgeNotches = 2`
-  against the app-wide 3. Dropped the override.
+- **KAGI NEWS** — the categories behind the Daily Briefing
+- **RSS FEEDS** — the subscriptions behind the Timeline
+- **MAILBOX** — the Gmail labels that put newsletters in the Timeline
 
-No schema change. Installs over 3.6.0 and keeps everything.
+Saved, Archive and Settings sit in that screen's bar, as they did on both of the screens it
+now stands in front of. Settings also lists KAGI NEWS above SUBSCRIPTIONS, so the three
+sources appear in the same order everywhere.
+
+RSS-only mode (Settings → HOME) is unchanged: the list button goes straight to the
+subscriptions, since Kagi is off there.
+
+No schema change. Installs over 3.6.1 and keeps everything.

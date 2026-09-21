@@ -257,16 +257,21 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     )
                 }
                 ReaderChrome(chrome.visible) {
+                    // One button, one destination. It used to open Kagi's categories from the
+                    // briefing and the RSS subscriptions from the timeline, and a reader who
+                    // learned it on one tab could not find their feeds from the other. In RSS
+                    // mode there is nothing to choose between, so it still goes straight to
+                    // the subscriptions.
                     val sources = LightBarButton.LightIcon(
                         icon = LightIcons.LIST,
                         onClick = {
-                            if (briefing) {
-                                navigateTo({ KagiScreen(it, repository) })
-                            } else {
+                            if (rssOnly) {
                                 navigateTo({ FeedsScreen(it, repository) })
+                            } else {
+                                navigateTo({ SourcesScreen(it, repository) })
                             }
                         },
-                        contentDescription = if (briefing) "Kagi categories" else "Subscriptions",
+                        contentDescription = if (rssOnly) "Subscriptions" else "Sources",
                     )
                     val search = LightBarButton.LightIcon(
                         icon = LightIcons.SEARCH,
@@ -322,7 +327,7 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
         labelCount: Int,
     ): String = when {
         feedCount == 0 && labelCount == 0 ->
-            "Nothing to read yet.\n\nOpen the list button to add a feed or connect Gmail."
+            "Nothing to read yet.\n\nOpen the list button, then RSS FEEDS to add a feed or MAILBOX to connect Gmail."
         favoritesOnly && favoriteCount == 0 ->
             "No favorite feeds yet.\n\nStar a feed in Subscriptions, or switch back to all feeds."
         unreadOnly -> "You’re all caught up.\n\nSwitch the filter to see everything again."
@@ -385,6 +390,96 @@ internal fun articleReader(
 private fun rememberImageStore(repository: RssRepository): ArticleImageStore? {
     val enabled by repository.imagesEnabled.collectAsState(initial = true)
     return repository.images.takeIf { enabled }
+}
+
+/**
+ * Where everything on the home screen comes from, in one place.
+ *
+ * The list button opens this from either tab. Until 3.7 it opened Kagi's categories from the
+ * briefing and the RSS subscriptions from the timeline — the same glyph in the same slot going
+ * two places — and a reader looking for the feeds they had just added kept landing in Kagi.
+ * Three rows, always in this order, each with a count so an empty section says so before you
+ * open it. Saved and Archive sit in the bar because both category and subscription screens
+ * offered them, and this screen now stands in front of both.
+ */
+class SourcesScreen(
+    sealedActivity: SealedLightActivity,
+    private val repository: RssRepository,
+) : LightScreen<Unit, SourcesViewModel>(sealedActivity) {
+    override fun willShow() {
+        ReportContext.screen = "sources"
+    }
+
+    override val viewModelClass: Class<SourcesViewModel> = SourcesViewModel::class.java
+    override fun createViewModel() = SourcesViewModel(repository)
+
+    @Composable
+    override fun Content() {
+        val colors by LightThemeController.colors.collectAsState()
+        val kagiCount by viewModel.kagiCount.collectAsState()
+        val feedCount by viewModel.feedCount.collectAsState()
+        val labelCount by viewModel.labelCount.collectAsState()
+
+        WheelKeys()
+        NewsTheme(colors) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(LightThemeTokens.colors.background),
+            ) {
+                LightTopBar(
+                    leftButton = LightBarButton.LightIcon(LightIcons.BACK, onClick = { goBack() }),
+                    center = LightTopBarCenter.Text("Sources"),
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    SettingsRow(
+                        title = "KAGI NEWS",
+                        detail = counted(kagiCount, "category", "categories") + " — the Daily Briefing",
+                    ) {
+                        navigateTo({ KagiScreen(it, repository) })
+                    }
+                    SettingsRow(
+                        title = "RSS FEEDS",
+                        detail = counted(feedCount, "subscription", "subscriptions") + " — the Timeline",
+                    ) {
+                        navigateTo({ FeedsScreen(it, repository) })
+                    }
+                    SettingsRow(
+                        title = "MAILBOX",
+                        detail = counted(labelCount, "Gmail label", "Gmail labels") +
+                            " — newsletters in the Timeline",
+                    ) {
+                        navigateTo({ MailboxScreen(it, repository) })
+                    }
+                }
+                LightBottomBar(
+                    items = listOf(
+                        LightBarButton.LightIcon(
+                            icon = LightIcons.STAR_OUTLINE,
+                            onClick = { navigateTo({ SavedScreen(it, repository) }) },
+                            contentDescription = "Saved articles",
+                        ),
+                        LightBarButton.Icon(
+                            painter = painterResource(R.drawable.ic_folder_white),
+                            onClick = { navigateTo({ ArchiveScreen(it, repository) }) },
+                            contentDescription = "Archive",
+                        ),
+                        LightBarButton.LightIcon(
+                            icon = LightIcons.SETTINGS,
+                            onClick = { navigateTo({ SettingsScreen(it, repository) }) },
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+
+    /** `None yet`, `1 category`, `12 categories`. */
+    private fun counted(count: Int, one: String, many: String): String = when (count) {
+        0 -> "None yet"
+        1 -> "1 $one"
+        else -> "$count $many"
+    }
 }
 
 class FeedsScreen(
@@ -1387,6 +1482,9 @@ class SettingsScreen(
                 LightScrollView(modifier = Modifier.weight(1f), scrollState = scroll) {
                     SettingsRow("APPEARANCE", "Toggle light / dark") {
                         LightThemeController.toggle()
+                    }
+                    SettingsRow("KAGI NEWS", "Categories you follow") {
+                        navigateTo({ KagiScreen(it, repository) })
                     }
                     SettingsRow("SUBSCRIPTIONS", "Feeds you follow") {
                         navigateTo({ FeedsScreen(it, repository) })

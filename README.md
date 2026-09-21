@@ -101,7 +101,7 @@ and a marker is left where each one was, so a wrong guess is visible rather than
 
 [Kagi News](https://news.kagi.com) publishes its edition as public JSON — `kite.json` lists
 the categories, and each category file holds a dozen stories synthesised from dozens of
-sources. No key, no account. **News → Kagi News tab → list button → +** to follow a category;
+sources. No key, no account. **News → list button → KAGI NEWS → +** to follow a category;
 the picker shelves the ~190 of them as Kagi's general categories, places folded under a parent,
 and topics. Each category is read on its own, in Kagi's ranking, and NEXT moves to the next
 one. A story's sources open in the reader. Kagi refreshes about once a day; the app asks
@@ -302,6 +302,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v3.7.0  | —         | The list button opens one Sources screen from either tab (Kagi News, RSS feeds, Mailbox, each with a count); it used to go to Kagi from the briefing and to feeds from the timeline |
 | v3.6.1  | —         | Startup crash on every launch in 3.6.0 (reporting install was asserted, not attempted); 8 AM daily refresh instead of every open; clocks follow timezone changes; pull-to-refresh needs the standard 3 notches |
 | v3.6.0  | f2954c2   | Reporting through light-common's chip: shake, crash offer, Settings → Send feedback |
 | v3.5.0  | —         | Shake to report a bug, filed to light-reports; a folder for the archive instead of the delete glyph; Add moved into the Subscriptions bottom bar |

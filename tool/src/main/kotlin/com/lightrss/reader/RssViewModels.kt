@@ -638,6 +638,19 @@ class SettingsViewModel(private val repository: RssRepository) : LightViewModel<
 }
 
 
+/** Counts for the three rows of the Sources screen; the rows themselves are static. */
+class SourcesViewModel(private val repository: RssRepository) : LightViewModel<Unit>() {
+    val kagiCount: StateFlow<Int> = repository.observeFeeds(Source.KAGI)
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val feedCount: StateFlow<Int> = repository.observeFeeds(Source.RSS)
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+    val labelCount: StateFlow<Int> = repository.observeFeeds(Source.GMAIL)
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+}
+
 /** The Kagi categories being followed, with their unread counts. */
 class KagiFeedsViewModel(private val repository: RssRepository) : LightViewModel<Unit>() {
     val feeds: StateFlow<List<FeedRow>> = repository.observeKagiFeeds()

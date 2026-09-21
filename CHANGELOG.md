@@ -4,6 +4,17 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.7.0 - 2026-09-21
+
+### Changed
+
+- The list button in the home bar opens `SourcesScreen` from both tabs: three rows, KAGI NEWS,
+  RSS FEEDS and MAILBOX, each with a count, and Saved / Archive / Settings in the bar. It used
+  to route on the current tab (briefing → `KagiScreen`, timeline → `FeedsScreen`). RSS-only
+  mode still goes straight to `FeedsScreen`, since Kagi is off there.
+- Settings gains a KAGI NEWS row above SUBSCRIPTIONS, so the three sources are listed in the
+  same order everywhere.
+
 ## 3.6.0 - 2026-09-05
 
 ### Changed
