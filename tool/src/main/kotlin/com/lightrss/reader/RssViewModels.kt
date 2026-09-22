@@ -291,7 +291,7 @@ class AddFeedViewModel(private val repository: RssRepository) : LightViewModel<L
                     )
                 }
                 withContext(Dispatchers.Main) {
-                    onError(RssRepository.friendlyMessage(error))
+                    onError(RssRepository.friendlyMessage(error, what = "add a feed"))
                 }
             }
         }
@@ -385,7 +385,7 @@ class DeleteFeedViewModel(
             } catch (error: Throwable) {
                 _isDeleting.value = false
                 withContext(Dispatchers.Main) {
-                    onError(RssRepository.friendlyMessage(error))
+                    onError(RssRepository.friendlyMessage(error, what = "delete a feed"))
                 }
             }
         }
@@ -584,7 +584,7 @@ class ReaderPageViewModel(
                 throw error
             } catch (error: Throwable) {
                 _state.update {
-                    it.copy(isLoading = false, error = RssRepository.friendlyMessage(error))
+                    it.copy(isLoading = false, error = RssRepository.friendlyMessage(error, what = "load the article"))
                 }
             }
         }
@@ -689,7 +689,7 @@ class KagiPickerViewModel(private val repository: RssRepository) : LightViewMode
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                _state.update { it.copy(isLoading = false, error = RssRepository.friendlyMessage(error)) }
+                _state.update { it.copy(isLoading = false, error = RssRepository.friendlyMessage(error, what = "load Kagi's category list")) }
             }
         }
     }
@@ -713,7 +713,7 @@ class KagiPickerViewModel(private val repository: RssRepository) : LightViewMode
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                _state.update { it.copy(adding = null, error = RssRepository.friendlyMessage(error)) }
+                _state.update { it.copy(adding = null, error = RssRepository.friendlyMessage(error, what = "follow a Kagi category")) }
             }
         }
     }

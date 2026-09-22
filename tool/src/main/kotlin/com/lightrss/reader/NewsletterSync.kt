@@ -212,7 +212,7 @@ class NewsletterSync(private val dao: RssDao) {
         } catch (e: NewsletterError) {
             throw e
         } catch (e: Exception) {
-            throw NewsletterError(RssRepository.friendlyMessage(e))
+            throw NewsletterError(RssRepository.friendlyMessage(e, what = "reach Gmail"))
         }
     }
 

@@ -302,6 +302,7 @@ one or more untagged commits that shipped as part of them; those are noted.
 
 | Version | Commit | Change |
 | --- | --- | --- |
+| v3.8.0  | —         | Every caught failure files itself: `friendlyMessage` records with light-common, the SEND ERROR? chip raises on its own |
 | v3.7.0  | —         | The list button opens one Sources screen from either tab (Kagi News, RSS feeds, Mailbox, each with a count); it used to go to Kagi from the briefing and to feeds from the timeline |
 | v3.6.1  | —         | Startup crash on every launch in 3.6.0 (reporting install was asserted, not attempted); 8 AM daily refresh instead of every open; clocks follow timezone changes; pull-to-refresh needs the standard 3 notches |
 | v3.6.0  | f2954c2   | Reporting through light-common's chip: shake, crash offer, Settings → Send feedback |

@@ -1,5 +1,6 @@
 package com.lightrss.reader
 
+import com.gios.light.common.report.Trouble
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -770,6 +771,9 @@ class RssRepository(
                 )
             }
             runCatching { prefetchFullText() }
+            // One report for the run, not one per feed: the per-feed reason is on the feed's
+            // row (setFeedError), and twenty failing feeds on a dead connection are one fact.
+            if (failures > 0) Trouble.record("refresh every feed", "$failures of ${feeds.size} failed")
             _syncState.value = SyncState(
                 isRefreshing = false,
                 completedFeeds = feeds.size,
@@ -865,7 +869,7 @@ class RssRepository(
             }
         }
     }.onFailure { error ->
-        dao.setFeedError(feed.id, friendlyMessage(error))
+        dao.setFeedError(feed.id, friendlyMessage(error, what = "refresh a feed"))
     }
 
     private fun ParsedFeed.toEntities(feedId: Long): List<ArticleUpsert> =
@@ -943,7 +947,18 @@ class RssRepository(
             "Hacker News" to "https://hnrss.org/frontpage",
         )
 
-        fun friendlyMessage(error: Throwable): String {
+        /**
+         * The sentence a caught error becomes — and, since 3.8, the report it files.
+         *
+         * Every catch block in the app ends here, so this is the one place that can raise
+         * light-common's SEND ERROR? chip for all of them. Before, the only failures that
+         * reached the tracker were the ones somebody shook the phone about; a feed that
+         * quietly stopped refreshing never did. [what] completes "News could not …"; the
+         * detail is the exception's class and message, which for a feed reader is a host, a
+         * status or a parser's complaint. Deduped per [what] per hour by [Trouble].
+         */
+        fun friendlyMessage(error: Throwable, what: String = "reach a feed"): String {
+            Trouble.record(what, error)
             val message = error.message.orEmpty()
             return when {
                 "timeout" in message.lowercase() -> "The request timed out."

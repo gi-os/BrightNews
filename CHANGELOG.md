@@ -4,6 +4,14 @@ Notable changes to Light RSS are recorded here. This project follows [Semantic V
 
 ## Unreleased
 
+## 3.8.0 - 2026-09-21
+
+### Changed
+
+- `RssRepository.friendlyMessage(error, what)` records the failure with light-common's
+  `Trouble` before turning it into a sentence, so the SEND ERROR? chip raises itself. Every
+  call site names what it was doing; `refreshAll` records once per run with the failure count.
+
 ## 3.7.0 - 2026-09-21
 
 ### Changed

@@ -314,7 +314,7 @@ class LabelPickerViewModel(private val repository: RssRepository) : LightViewMod
                 throw error
             } catch (error: Throwable) {
                 _state.update {
-                    it.copy(isLoading = false, error = RssRepository.friendlyMessage(error))
+                    it.copy(isLoading = false, error = RssRepository.friendlyMessage(error, what = "list Gmail labels"))
                 }
             }
         }
@@ -329,7 +329,7 @@ class LabelPickerViewModel(private val repository: RssRepository) : LightViewMod
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                withContext(Dispatchers.Main) { onError(RssRepository.friendlyMessage(error)) }
+                withContext(Dispatchers.Main) { onError(RssRepository.friendlyMessage(error, what = "subscribe to a Gmail label")) }
             }
         }
     }
