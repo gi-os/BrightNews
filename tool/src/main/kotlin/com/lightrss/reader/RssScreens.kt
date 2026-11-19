@@ -155,7 +155,8 @@ class HomeScreen(sealedActivity: SealedLightActivity) :
                     context = context,
                     appName = "News",
                     label = "news",
-                    token = BuildConfig.REPORT_TOKEN,
+                    // No key on the phone: reports queue until light-common 1.11.0, which posts them to the report relay.
+                    token = "",
                 )
             }
         }
